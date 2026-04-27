@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
+
+const numActivitiesPerPage = 200
 
 type StravaClient struct {
 	httpClient  *http.Client
@@ -26,7 +30,7 @@ func NewStravaClient(baseURL, accessToken string) (*StravaClient, error) {
 
 	return &StravaClient{
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 20 * time.Second,
 		},
 		baseURL:     baseURL,
 		accessToken: accessToken,
@@ -34,24 +38,68 @@ func NewStravaClient(baseURL, accessToken string) (*StravaClient, error) {
 }
 
 func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
-	dto, err := get[StravaAthleteDTO](sc, ctx, "/athlete")
+
+	baseUrl := sc.baseURL + "/athlete"
+
+	endpoint, err := url.Parse(baseUrl)
+	if err != nil {
+		return Athlete{}, err
+	}
+
+	dto, err := get[StravaAthleteDTO](sc, ctx, endpoint.String())
 	if err != nil {
 		return Athlete{}, err
 	}
 	return dto.ToAthlete(), nil
 }
 
-func (sc *StravaClient) GetAthleteActivities(ctx context.Context) ([]Activity, error) {
-	dto, err := get[StravaActivitiesDTO](sc, ctx, "/athlete/activities")
+func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]Activity, error) {
+
+	baseUrl := sc.baseURL + "/athlete/activities"
+	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
 		return []Activity{}, err
 	}
-	return dto.ToActivies(), nil
+
+	queryParams := url.Values{}
+	queryParams.Set("per_page", strconv.Itoa(numActivitiesPerPage))
+
+	//protect against activity uploaded during collection
+	queryParams.Set("before", strconv.FormatInt(time.Now().Unix(), 10))
+
+	bucket := []Activity{}
+	pageCounter := 1
+
+	for {
+		queryParams.Set("page", strconv.Itoa(pageCounter))
+		endpoint.RawQuery = queryParams.Encode()
+
+		dto, err := get[StravaActivitiesDTO](sc, ctx, endpoint.String())
+		if err != nil {
+			return []Activity{}, err
+		}
+
+		returned := dto.ToActivies()
+
+		bucket = append(bucket, returned...)
+
+		//no next page to query
+		if len(dto) < numActivitiesPerPage {
+			break
+		}
+
+		pageCounter++
+	}
+
+	return bucket, nil
 }
 
 func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, error) {
+	defer timeCheck(time.Now())
 
 	var zero T
+
+	fmt.Printf("Requesting: %s", endpoint)
 
 	request, err := sc.buildHTTPRequest(endpoint, ctx)
 	if err != nil {
@@ -74,9 +122,7 @@ func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, erro
 
 func (sc *StravaClient) buildHTTPRequest(endpoint string, ctx context.Context) (*http.Request, error) {
 
-	url := baseStravaURL + endpoint
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 
 	if err != nil {
 		return nil, err
@@ -92,6 +138,9 @@ func (sc *StravaClient) buildHTTPRequest(endpoint string, ctx context.Context) (
 }
 
 func handleResponse[T any](response *http.Response) (T, error) {
+
+	var zero T
+
 	statusCode := response.StatusCode
 
 	switch {
@@ -100,28 +149,35 @@ func handleResponse[T any](response *http.Response) (T, error) {
 		var t T
 		err := json.NewDecoder(response.Body).Decode(&t)
 		if err != nil {
-			return *new(T), err
+			return zero, err
 		}
 		return t, nil
 
 	case statusCode == http.StatusUnauthorized:
-		return *new(T), APIError{
+		return zero, APIError{
 			Code:    statusCode,
 			Message: ErrStravaAuthError.Error(),
 		}
 
 	case statusCode >= 400 && statusCode < 500:
-		return *new(T), APIError{
+		return zero, APIError{
 			Code:    statusCode,
 			Message: ErrStravaAuthError.Error(),
 		}
 
 	case statusCode == http.StatusTooManyRequests || statusCode >= 500:
-		return *new(T), ErrRecoverableServerError
+		return zero, ErrRecoverableServerError
 
 	default:
-		return *new(T), ErrUnrecognisedStatusCode
+		return zero, ErrUnrecognisedStatusCode
 	}
+}
+
+//Utility
+
+func timeCheck(start time.Time) {
+	elapsed := time.Since(start).Seconds()
+	fmt.Printf(" # Completed in %.2fs\n", elapsed)
 }
 
 //Athlete
@@ -131,7 +187,7 @@ type StravaAthleteDTO struct {
 	Username  string `json:"username"`
 	FirstName string `json:"firstname"`
 	LastName  string `json:"lastname"`
-	//TODO: missing fields from the api
+	// other fields exist on API
 }
 
 type Athlete struct {
@@ -149,19 +205,22 @@ func (sa StravaAthleteDTO) ToAthlete() Athlete {
 // Activities
 
 type StravaSummaryActivityDTO struct {
-	ID                 int64   `json:"id"`
-	Name               string  `json:"name"`
-	Distance           float64 `json:"distance"`
-	MovingTime         float64 `json:"moving_time"`
-	ElapsedTime        float64 `json:"elapsed_time"`
-	TotalElevationGain float64 `json:"total_elevation_gain"`
-	SportType          string  `json:"sport_type"`
+	ID                 int64     `json:"id"`
+	Name               string    `json:"name"`
+	StartDate          time.Time `json:"start_date"`
+	Distance           float64   `json:"distance"`
+	MovingTime         float64   `json:"moving_time"`
+	ElapsedTime        float64   `json:"elapsed_time"`
+	TotalElevationGain float64   `json:"total_elevation_gain"`
+	SportType          string    `json:"sport_type"`
+	// other fields exist on API
 }
 type StravaActivitiesDTO []StravaSummaryActivityDTO
 
 type Activity struct {
-	Id   int64
-	Name string
+	Id             int64
+	Name           string
+	StartTimestamp int64
 }
 
 func (sa StravaActivitiesDTO) ToActivies() []Activity {
@@ -170,8 +229,9 @@ func (sa StravaActivitiesDTO) ToActivies() []Activity {
 
 	for _, activity := range sa {
 		bucket = append(bucket, Activity{
-			Id:   activity.ID,
-			Name: activity.Name,
+			Id:             activity.ID,
+			Name:           activity.Name,
+			StartTimestamp: activity.StartDate.Unix(),
 		})
 	}
 

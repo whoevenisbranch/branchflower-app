@@ -19,6 +19,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
+	fmt.Println("### Welcome to Branchflower App ###")
 	fmt.Println()
 
 	accessToken, err := fetchAccessToken()
@@ -33,21 +34,29 @@ func main() {
 		return
 	}
 
+	fmt.Println("Please wait whilst we gather your activities...")
+
 	athlete, err := stravaClient.GetAthlete(context.Background())
-	activities, err := stravaClient.GetAthleteActivities(context.Background())
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	activities, err := stravaClient.GetAllAthleteActivities(context.Background())
 
 	fmt.Println()
 
+	GreetAthlete(athlete)
 	if err == nil {
-		GreetAthlete(athlete)
-		fmt.Println(len(activities))
-
-		if len(activities) > 0 {
-			PrintLastUploadedActivity(activities[0])
+		count := len(activities)
+		if count > 0 {
+			fmt.Printf("You have recorded %d activities on Strava!\n", count)
+			fmt.Printf("Your first activity recorded was \"%s\"\n", activities[count-1].Name)
+			fmt.Printf("Your most recent activity recorded was \"%s\"\n", activities[0].Name)
+		} else {
+			fmt.Printf("You have no recorded activities")
 		}
-
 		return
-
 	}
 
 	if errors.Is(err, ErrStravaAuthError) {
@@ -67,8 +76,4 @@ func GreetAthlete(athlete Athlete) {
 	}
 
 	fmt.Println(greeting)
-}
-
-func PrintLastUploadedActivity(activity Activity) {
-	fmt.Printf("Last recorded activity was called %s (%d)\n", activity.Name, activity.Id)
 }
