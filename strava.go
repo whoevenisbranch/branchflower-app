@@ -53,7 +53,7 @@ func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 	return dto.ToAthlete(), nil
 }
 
-func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]Activity, error) {
+func (sc *StravaClient) GetAthleteActivities(ctx context.Context, before, after int64) ([]Activity, error) {
 
 	baseUrl := sc.baseURL + "/athlete/activities"
 	endpoint, err := url.Parse(baseUrl)
@@ -65,7 +65,8 @@ func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]Activity
 	queryParams.Set("per_page", strconv.Itoa(numActivitiesPerPage))
 
 	//protect against activity uploaded during collection
-	queryParams.Set("before", strconv.FormatInt(time.Now().Unix(), 10))
+	queryParams.Set("before", strconv.FormatInt(before, 10))
+	queryParams.Set("after", strconv.FormatInt(after, 10))
 
 	bucket := []Activity{}
 	pageCounter := 1
@@ -154,6 +155,7 @@ func handleResponse[T any](response *http.Response) (T, error) {
 		return t, nil
 
 	case statusCode == http.StatusUnauthorized:
+
 		return zero, APIError{
 			Code:    statusCode,
 			Message: ErrStravaAuthError.Error(),
@@ -173,13 +175,6 @@ func handleResponse[T any](response *http.Response) (T, error) {
 	}
 }
 
-//Utility
-
-func timeCheck(start time.Time) {
-	elapsed := time.Since(start).Seconds()
-	fmt.Printf(" # Completed in %.2fs\n", elapsed)
-}
-
 //Athlete
 
 type StravaAthleteDTO struct {
@@ -191,12 +186,16 @@ type StravaAthleteDTO struct {
 }
 
 type Athlete struct {
-	FullName string
-	Username string
+	StravaId    int
+	FullName    string
+	Username    string
+	TotalRuns   int
+	RunSnapshot map[int]SnapshotWeek
 }
 
 func (sa StravaAthleteDTO) ToAthlete() Athlete {
 	return Athlete{
+		StravaId: sa.ID,
 		FullName: fmt.Sprintf("%s %s", sa.FirstName, sa.LastName),
 		Username: sa.Username,
 	}
@@ -207,7 +206,7 @@ func (sa StravaAthleteDTO) ToAthlete() Athlete {
 type StravaSummaryActivityDTO struct {
 	ID                 int64     `json:"id"`
 	Name               string    `json:"name"`
-	StartDate          time.Time `json:"start_date"`
+	StartDateLocal     time.Time `json:"start_date_local"`
 	Distance           float64   `json:"distance"`
 	MovingTime         float64   `json:"moving_time"`
 	ElapsedTime        float64   `json:"elapsed_time"`
@@ -220,7 +219,10 @@ type StravaActivitiesDTO []StravaSummaryActivityDTO
 type Activity struct {
 	Id             int64
 	Name           string
-	StartTimestamp int64
+	Type           string
+	LocalStartTime time.Time
+	Distance       float64
+	Time           float64
 }
 
 func (sa StravaActivitiesDTO) ToActivies() []Activity {
@@ -231,7 +233,10 @@ func (sa StravaActivitiesDTO) ToActivies() []Activity {
 		bucket = append(bucket, Activity{
 			Id:             activity.ID,
 			Name:           activity.Name,
-			StartTimestamp: activity.StartDate.Unix(),
+			Type:           activity.SportType,
+			LocalStartTime: time.Unix(activity.StartDateLocal.Unix(), 10),
+			Distance:       activity.Distance,
+			Time:           activity.MovingTime,
 		})
 	}
 
