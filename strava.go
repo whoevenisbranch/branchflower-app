@@ -191,12 +191,14 @@ type StravaAthleteDTO struct {
 }
 
 type Athlete struct {
+	StravaId int
 	FullName string
 	Username string
 }
 
 func (sa StravaAthleteDTO) ToAthlete() Athlete {
 	return Athlete{
+		StravaId: sa.ID,
 		FullName: fmt.Sprintf("%s %s", sa.FirstName, sa.LastName),
 		Username: sa.Username,
 	}
@@ -207,7 +209,7 @@ func (sa StravaAthleteDTO) ToAthlete() Athlete {
 type StravaSummaryActivityDTO struct {
 	ID                 int64     `json:"id"`
 	Name               string    `json:"name"`
-	StartDate          time.Time `json:"start_date"`
+	StartDate          time.Time `json:"start_date_local"`
 	Distance           float64   `json:"distance"`
 	MovingTime         float64   `json:"moving_time"`
 	ElapsedTime        float64   `json:"elapsed_time"`
@@ -220,7 +222,8 @@ type StravaActivitiesDTO []StravaSummaryActivityDTO
 type Activity struct {
 	Id             int64
 	Name           string
-	StartTimestamp int64
+	StartTimestamp time.Time
+	MovingTime     float64
 }
 
 func (sa StravaActivitiesDTO) ToActivies() []Activity {
@@ -231,7 +234,8 @@ func (sa StravaActivitiesDTO) ToActivies() []Activity {
 		bucket = append(bucket, Activity{
 			Id:             activity.ID,
 			Name:           activity.Name,
-			StartTimestamp: activity.StartDate.Unix(),
+			StartTimestamp: activity.StartDate,
+			MovingTime:     activity.MovingTime,
 		})
 	}
 
