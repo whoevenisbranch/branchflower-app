@@ -108,6 +108,7 @@ func ProcessNewUserActivityBackfill(id int, activities []Activity) map[time.Time
 		totalMovingTime += activity.MovingTime
 
 		record.TotalMovingTime += activity.MovingTime
+		record.TotalActivities++
 		record.LastUpdatedAt = time.Now().Unix()
 		dailyRecords[date] = record
 	}
@@ -133,7 +134,7 @@ func PrintRecords(records map[time.Time]DailyActivityRecord) {
 
 	for _, key := range keys {
 		record := records[key]
-		fmt.Printf("Date: %v; TotalMovingTime: %.2f, LastUpdatedAt: %v\n", record.Date, record.TotalMovingTime, record.LastUpdatedAt)
+		fmt.Printf("Date: %v; Activity Count:%d TotalMovingTime: %.2f, LastUpdatedAt: %v\n", record.Date, record.TotalActivities, record.TotalMovingTime, record.LastUpdatedAt)
 	}
 }
 
@@ -141,5 +142,6 @@ type DailyActivityRecord struct {
 	StravaId        int
 	Date            time.Time
 	TotalMovingTime float64 //seconds
-	LastUpdatedAt   int64   //the last time the record was updates
+	TotalActivities int
+	LastUpdatedAt   int64 //the last time the record was updates
 }
