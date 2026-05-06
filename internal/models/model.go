@@ -1,7 +1,7 @@
 package models
 
 import (
-	"fmt"
+	"log"
 	"time"
 )
 
@@ -14,8 +14,7 @@ type User struct {
 }
 
 func (u *User) Greet() {
-	greeting := fmt.Sprintf("Welcome %s to Branchflower App!", u.FirstName)
-	fmt.Println(greeting)
+	log.Printf("Welcome %s to Branchflower App!", u.FirstName)
 }
 
 type DailyActivity struct {

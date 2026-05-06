@@ -2,7 +2,7 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
+	"log"
 )
 
 func Migrate(db *sql.DB) error {
@@ -37,6 +37,6 @@ func Migrate(db *sql.DB) error {
 		return err
 	}
 
-	fmt.Println("Tables initialised successfully")
+	log.Println("Tables initialised successfully")
 	return nil
 }

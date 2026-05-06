@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/whoevenisbranch/branchflower/internal/models"
@@ -42,7 +43,7 @@ func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.
 		return nil, err
 	}
 
-	fmt.Printf("Created user: %d\n", id)
+	log.Printf("Created user: %d\n", id)
 
 	return &models.User{
 		ID:        int(id),
@@ -66,7 +67,7 @@ func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*models.Use
 		return nil, err
 	}
 
-	fmt.Printf("Found user: %d\n", u.ID)
+	log.Printf("Found user: %d\n", u.ID)
 	return &u, nil
 }
 
@@ -121,7 +122,7 @@ func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]m
 
 		_, err := stmt.ExecContext(ctx, userID, date, activityCount, movingTime, now)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("Insert failed. Reason: %s\n", err)
 			continue
 		}
 		actual++
@@ -136,7 +137,7 @@ func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]m
 	return nil
 }
 
-func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) int {
+func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) (int, error) {
 
 	var count int
 	var err error
@@ -146,10 +147,10 @@ func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) int {
 	).Scan(&count)
 
 	if err != nil {
-		return 0
+		return 0, err
 	}
 
-	return count
+	return count, nil
 
 }
 

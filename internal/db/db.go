@@ -23,7 +23,7 @@ func New() *sql.DB {
 		log.Fatal(fmt.Errorf("Failed to connect to database"))
 	}
 
-	fmt.Println("Connected!")
+	log.Println("Connected!")
 
 	return db
 }

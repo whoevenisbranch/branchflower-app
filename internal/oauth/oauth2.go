@@ -88,10 +88,9 @@ func FetchAccessToken() (string, error) {
 }
 
 func printRedirectHelp(url string) {
-	fmt.Println("To continue you must first authenticate yourself with Strava and accept the requested scopes...")
-	fmt.Println("Please copy the following link into your browser, and follow the on-screen prompts...")
-	fmt.Println("Link: " + url)
-	fmt.Println()
+	log.Println("To continue you must first authenticate yourself with Strava and accept the requested scopes...")
+	log.Println("Please copy the following link into your browser, and follow the on-screen prompts...")
+	log.Println("Link: " + url)
 
 }
 

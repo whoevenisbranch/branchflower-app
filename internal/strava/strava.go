@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/whoevenisbranch/branchflower/internal/models"
+	"github.com/whoevenisbranch/branchflower/internal/oauth"
 )
 
 const numActivitiesPerPage = 200
@@ -21,11 +23,17 @@ type StravaClient struct {
 	accessToken string
 }
 
-func NewStravaClient(baseURL, accessToken string) (*StravaClient, error) {
+func NewStravaClient(baseURL string) (*StravaClient, error) {
 
 	if baseURL == "" {
 		return nil, ErrStravaClientMissingBaseURL
 	}
+
+	accessToken, err := oauth.FetchAccessToken()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if accessToken == "" {
 		return nil, ErrStravaClientMissingAccessToken
 	}
@@ -101,7 +109,7 @@ func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, erro
 
 	var zero T
 
-	fmt.Printf("Requesting: %s", endpoint)
+	log.Printf("Requesting: %s", endpoint)
 
 	request, err := sc.buildHTTPRequest(endpoint, ctx)
 	if err != nil {
@@ -179,7 +187,7 @@ func handleResponse[T any](response *http.Response) (T, error) {
 
 func timeCheck(start time.Time) {
 	elapsed := time.Since(start).Seconds()
-	fmt.Printf(" # Completed in %.2fs\n", elapsed)
+	log.Printf("Completed in %.2fs\n", elapsed)
 }
 
 //Athlete
