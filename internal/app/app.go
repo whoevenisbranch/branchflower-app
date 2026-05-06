@@ -1,50 +1,43 @@
-package main
+package app
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/whoevenisbranch/branchflower/internal/models"
+	"github.com/whoevenisbranch/branchflower/internal/oauth"
+	"github.com/whoevenisbranch/branchflower/internal/repo"
+	"github.com/whoevenisbranch/branchflower/internal/strava"
 )
+
+type app struct {
+	repository repo.Repo
+}
 
 const baseStravaURL string = "https://www.strava.com/api/v3"
 
-func main() {
+var stravaClient *strava.StravaClient
 
-	//Load environment variables
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+func NewApp(repository repo.Repo) app {
+	return app{
+		repository: repository,
 	}
+}
 
-	db, err := Connect("app.db")
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	defer db.Close()
-
-	if err = CreateTables(db); err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	repo := NewRepo(db)
-
+func (a *app) Run() {
 	fmt.Println("### Welcome to Branchflower App ###")
 	fmt.Println()
 
-	accessToken, err := fetchAccessToken()
+	accessToken, err := oauth.FetchAccessToken()
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	stravaClient, err := NewStravaClient(baseStravaURL, accessToken)
+	stravaClient, err = strava.NewStravaClient(baseStravaURL, accessToken)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -56,10 +49,10 @@ func main() {
 		return
 	}
 
-	user, err := repo.GetUserByStravaId(context.Background(), athlete.StravaId)
+	user, err := a.repository.GetUserByStravaId(context.Background(), athlete.StravaId)
 	if errors.Is(err, sql.ErrNoRows) {
 		fmt.Printf("No existing user exists for strava id = %d, Creating new user...\n", athlete.StravaId)
-		user, err = repo.CreateUser(context.Background(), athlete)
+		user, err = a.repository.CreateUser(context.Background(), athlete)
 	}
 
 	if err != nil {
@@ -81,23 +74,23 @@ func main() {
 		pendingEntries := normaliseActivities(user.ID, activities)
 
 		//Returns an error if not every activity is successfully sync'd
-		err = repo.AddDailyActivities(context.Background(), pendingEntries)
+		err = a.repository.AddDailyActivities(context.Background(), pendingEntries)
 		if err != nil {
 			fmt.Println(err.Error())
 			return
 		}
 
-		repo.SetUserLastSync(context.Background(), user.ID)
+		a.repository.SetUserLastSync(context.Background(), user.ID)
 		fmt.Println("Activity sync completed successfully!")
 	}
 
-	fmt.Println(repo.CountTotalActiveDaysById(context.Background(), user.ID))
+	fmt.Println(a.repository.CountTotalActiveDaysById(context.Background(), user.ID))
 
 	now := time.Now().UTC()
 	from := time.Date(now.Year(), now.Month(), now.Day()-7, 0, 0, 0, 0, time.UTC)
 	to := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	weeklyActiveDays, err := repo.FilterUserActiveDays(context.Background(), user.ID, from, to)
+	weeklyActiveDays, err := a.repository.FilterUserActiveDays(context.Background(), user.ID, from, to)
 
 	if err != nil {
 		fmt.Println(err.Error())
@@ -108,9 +101,9 @@ func main() {
 	fmt.Println(weeklyActiveDays[len(weeklyActiveDays)-1].MovingTimeSeconds)
 }
 
-func normaliseActivities(userID int, activities []Activity) map[time.Time]DailyActivity {
+func normaliseActivities(userID int, activities []models.Activity) map[time.Time]models.DailyActivity {
 
-	records := make(map[time.Time]DailyActivity)
+	records := make(map[time.Time]models.DailyActivity)
 
 	for _, activity := range activities {
 
@@ -120,7 +113,7 @@ func normaliseActivities(userID int, activities []Activity) map[time.Time]DailyA
 		record, ok := records[date]
 
 		if !ok {
-			record = DailyActivity{
+			record = models.DailyActivity{
 				UserID: userID,
 				Date:   date,
 			}

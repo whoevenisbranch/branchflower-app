@@ -1,4 +1,4 @@
-package main
+package oauth
 
 import (
 	"context"
@@ -19,7 +19,7 @@ const (
 	stravaTokenURL = "https://www.strava.com/oauth/token"
 )
 
-func fetchAccessToken() (string, error) {
+func FetchAccessToken() (string, error) {
 
 	code := ""
 
@@ -95,7 +95,7 @@ func printRedirectHelp(url string) {
 
 }
 
-func exchangeCodeForToken(clientId, secret, code, grantType string) (AuthResponse, error) {
+func exchangeCodeForToken(clientId, secret, code, grantType string) (authResponse, error) {
 
 	form := url.Values{}
 	form.Set("client_id", clientId)
@@ -105,26 +105,26 @@ func exchangeCodeForToken(clientId, secret, code, grantType string) (AuthRespons
 
 	resp, err := http.PostForm(stravaTokenURL, form)
 	if err != nil {
-		return AuthResponse{}, err
+		return authResponse{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return AuthResponse{}, errors.New("token exchange failed")
+		return authResponse{}, errors.New("token exchange failed")
 	}
 
-	var t AuthResponse
+	var t authResponse
 	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
-		return AuthResponse{}, err
+		return authResponse{}, err
 	}
 
-	token := AuthResponse{
+	token := authResponse{
 		AccessToken: t.AccessToken,
 	}
 
 	return token, nil
 }
 
-type AuthResponse struct {
+type authResponse struct {
 	AccessToken string `json:"access_token"`
 }

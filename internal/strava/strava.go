@@ -1,4 +1,4 @@
-package main
+package strava
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/whoevenisbranch/branchflower/internal/models"
 )
 
 const numActivitiesPerPage = 200
@@ -46,19 +48,19 @@ func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 		return Athlete{}, err
 	}
 
-	dto, err := get[StravaAthleteDTO](sc, ctx, endpoint.String())
+	dto, err := get[stravaAthleteDTO](sc, ctx, endpoint.String())
 	if err != nil {
 		return Athlete{}, err
 	}
 	return dto.ToAthlete(), nil
 }
 
-func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]Activity, error) {
+func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]models.Activity, error) {
 
 	baseUrl := sc.baseURL + "/athlete/activities"
 	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
-		return []Activity{}, err
+		return []models.Activity{}, err
 	}
 
 	queryParams := url.Values{}
@@ -67,16 +69,16 @@ func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]Activity
 	//protect against activity uploaded during collection
 	queryParams.Set("before", strconv.FormatInt(time.Now().Unix(), 10))
 
-	bucket := []Activity{}
+	bucket := []models.Activity{}
 	pageCounter := 1
 
 	for {
 		queryParams.Set("page", strconv.Itoa(pageCounter))
 		endpoint.RawQuery = queryParams.Encode()
 
-		dto, err := get[StravaActivitiesDTO](sc, ctx, endpoint.String())
+		dto, err := get[stravaActivitiesDTO](sc, ctx, endpoint.String())
 		if err != nil {
-			return []Activity{}, err
+			return []models.Activity{}, err
 		}
 
 		returned := dto.ToActivies()
@@ -182,7 +184,7 @@ func timeCheck(start time.Time) {
 
 //Athlete
 
-type StravaAthleteDTO struct {
+type stravaAthleteDTO struct {
 	ID        int    `json:"id"`
 	Username  string `json:"username"`
 	FirstName string `json:"firstname"`
@@ -196,7 +198,7 @@ type Athlete struct {
 	Username  string
 }
 
-func (sa StravaAthleteDTO) ToAthlete() Athlete {
+func (sa stravaAthleteDTO) ToAthlete() Athlete {
 	return Athlete{
 		StravaId:  sa.ID,
 		FirstName: sa.FirstName,
@@ -206,7 +208,7 @@ func (sa StravaAthleteDTO) ToAthlete() Athlete {
 
 // Activities
 
-type StravaSummaryActivityDTO struct {
+type stravaSummaryActivityDTO struct {
 	ID                 int64     `json:"id"`
 	Name               string    `json:"name"`
 	StartDate          time.Time `json:"start_date_local"`
@@ -217,21 +219,14 @@ type StravaSummaryActivityDTO struct {
 	SportType          string    `json:"sport_type"`
 	// other fields exist on API
 }
-type StravaActivitiesDTO []StravaSummaryActivityDTO
+type stravaActivitiesDTO []stravaSummaryActivityDTO
 
-type Activity struct {
-	Id                int64
-	Name              string
-	StartTimestamp    time.Time
-	MovingTimeSeconds int
-}
+func (sa stravaActivitiesDTO) ToActivies() []models.Activity {
 
-func (sa StravaActivitiesDTO) ToActivies() []Activity {
-
-	var bucket []Activity
+	var bucket []models.Activity
 
 	for _, activity := range sa {
-		bucket = append(bucket, Activity{
+		bucket = append(bucket, models.Activity{
 			Id:                activity.ID,
 			Name:              activity.Name,
 			StartTimestamp:    activity.StartDate,

@@ -1,10 +1,13 @@
-package main
+package repo
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/whoevenisbranch/branchflower/internal/models"
+	"github.com/whoevenisbranch/branchflower/internal/strava"
 )
 
 //
@@ -15,38 +18,12 @@ type Repo struct {
 	db *sql.DB
 }
 
-func NewRepo(db *sql.DB) *Repo {
-	return &Repo{db: db}
-}
-
-//
-//Models
-//
-
-type User struct {
-	ID         int
-	StravaID   int
-	FirstName  string
-	CreatedAt  time.Time
-	LastSyncAt *time.Time
-}
-
-func (u *User) Greet() {
-	greeting := fmt.Sprintf("Welcome %s to Branchflower App!", u.FirstName)
-	fmt.Println(greeting)
-}
-
-type DailyActivity struct {
-	ID                int
-	UserID            int
-	Date              time.Time
-	ActivityCount     int
-	MovingTimeSeconds int
-	LastUpdatedAt     time.Time
+func NewRepo(db *sql.DB) Repo {
+	return Repo{db: db}
 }
 
 // User Queries
-func (r *Repo) CreateUser(ctx context.Context, athlete Athlete) (*User, error) {
+func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.User, error) {
 
 	var err error
 
@@ -67,7 +44,7 @@ func (r *Repo) CreateUser(ctx context.Context, athlete Athlete) (*User, error) {
 
 	fmt.Printf("Created user: %d\n", id)
 
-	return &User{
+	return &models.User{
 		ID:        int(id),
 		StravaID:  athlete.StravaId,
 		FirstName: athlete.FirstName,
@@ -76,9 +53,9 @@ func (r *Repo) CreateUser(ctx context.Context, athlete Athlete) (*User, error) {
 
 }
 
-func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*User, error) {
+func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*models.User, error) {
 
-	var u User
+	var u models.User
 	var err error
 
 	err = r.db.QueryRowContext(ctx,
@@ -120,7 +97,7 @@ func (r *Repo) SetUserLastSync(ctx context.Context, userID int) error {
 // Daily Activity Queries
 //
 
-func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]DailyActivity) error {
+func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]models.DailyActivity) error {
 
 	expected := len(activites)
 	var actual = 0
@@ -176,9 +153,9 @@ func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) int {
 
 }
 
-func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to time.Time) ([]DailyActivity, error) {
+func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to time.Time) ([]models.DailyActivity, error) {
 
-	var records []DailyActivity
+	var records []models.DailyActivity
 	var err error
 
 	rows, err := r.db.QueryContext(ctx, `
@@ -193,7 +170,7 @@ func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to ti
 	defer rows.Close()
 
 	for rows.Next() {
-		var activity DailyActivity
+		var activity models.DailyActivity
 		err = rows.Scan(
 			&activity.ID,
 			&activity.UserID,

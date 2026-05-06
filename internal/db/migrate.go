@@ -1,33 +1,11 @@
-package main
+package db
 
 import (
 	"database/sql"
 	"fmt"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
-func Connect(path string) (*sql.DB, error) {
-
-	var db *sql.DB
-	var err error
-
-	db, err = sql.Open("sqlite3", path)
-	if err != nil {
-		return nil, err
-	}
-
-	pingErr := db.Ping()
-	if pingErr != nil {
-		return nil, err
-	}
-
-	fmt.Println("Connected!")
-
-	return db, nil
-}
-
-func CreateTables(db *sql.DB) error {
+func Migrate(db *sql.DB) error {
 	userTable := `
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
