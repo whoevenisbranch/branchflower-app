@@ -1,0 +1,213 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+)
+
+//
+// Repo
+//
+
+type Repo struct {
+	db *sql.DB
+}
+
+func NewRepo(db *sql.DB) *Repo {
+	return &Repo{db: db}
+}
+
+//
+//Models
+//
+
+type User struct {
+	ID         int
+	StravaID   int
+	FirstName  string
+	CreatedAt  time.Time
+	LastSyncAt *time.Time
+}
+
+func (u *User) Greet() {
+	greeting := fmt.Sprintf("Welcome %s to Branchflower App!", u.FirstName)
+	fmt.Println(greeting)
+}
+
+type DailyActivity struct {
+	ID                int
+	UserID            int
+	Date              time.Time
+	ActivityCount     int
+	MovingTimeSeconds int
+	LastUpdatedAt     time.Time
+}
+
+// User Queries
+func (r *Repo) CreateUser(ctx context.Context, athlete Athlete) (*User, error) {
+
+	var err error
+
+	now := time.Now().UTC()
+
+	result, err := r.db.ExecContext(ctx,
+		`INSERT INTO users (strava_id, first_name, created_at)
+		VALUES (?, ?, ?)`, athlete.StravaId, athlete.FirstName, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Created user: %d\n", id)
+
+	return &User{
+		ID:        int(id),
+		StravaID:  athlete.StravaId,
+		FirstName: athlete.FirstName,
+		CreatedAt: now,
+	}, nil
+
+}
+
+func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*User, error) {
+
+	var u User
+	var err error
+
+	err = r.db.QueryRowContext(ctx,
+		`SELECT * FROM users WHERE strava_id = ?`, stravaID,
+	).Scan(&u.ID, &u.StravaID, &u.FirstName, &u.CreatedAt, &u.LastSyncAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Found user: %d\n", u.ID)
+	return &u, nil
+}
+
+func (r *Repo) SetUserLastSync(ctx context.Context, userID int) error {
+
+	var err error
+
+	now := time.Now().UTC()
+
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE users
+		SET last_sync_at = ?
+		WHERE id = ?`, now, userID,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("Failed to set last sync for user: %d", userID)
+	}
+
+	return nil
+}
+
+//
+// Daily Activity Queries
+//
+
+func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]DailyActivity) error {
+
+	expected := len(activites)
+	var actual = 0
+
+	stmt, err := r.db.PrepareContext(ctx,
+		`INSERT INTO daily_activities 
+		(user_id, date, activity_count, moving_time_seconds, last_updated) 
+		VALUES (?, ?, ?, ?, ?)
+		`)
+	if err != nil {
+		return err
+	}
+
+	for _, record := range activites {
+
+		userID := record.UserID
+		date := record.Date
+		activityCount := record.ActivityCount
+		movingTime := record.MovingTimeSeconds
+		now := time.Now().UTC()
+
+		_, err := stmt.ExecContext(ctx, userID, date, activityCount, movingTime, now)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		actual++
+
+	}
+	stmt.Close()
+
+	if expected != actual {
+		return fmt.Errorf("Expected %d rows affected, got: %d\n", expected, actual)
+	}
+
+	return nil
+}
+
+func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) int {
+
+	var count int
+	var err error
+
+	err = r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM daily_activities WHERE user_id = ?`, userId,
+	).Scan(&count)
+
+	if err != nil {
+		return 0
+	}
+
+	return count
+
+}
+
+func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to time.Time) ([]DailyActivity, error) {
+
+	var records []DailyActivity
+	var err error
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT *
+		FROM daily_activities
+		WHERE user_id = ? AND date >= ? AND date <= ?
+		ORDER BY date ASC`, userID, from, to)
+
+	if err != nil {
+		return records, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var activity DailyActivity
+		err = rows.Scan(
+			&activity.ID,
+			&activity.UserID,
+			&activity.Date,
+			&activity.ActivityCount,
+			&activity.MovingTimeSeconds,
+			&activity.LastUpdatedAt)
+
+		if err != nil {
+			return records, err
+		}
+
+		records = append(records, activity)
+	}
+
+	return records, nil
+}

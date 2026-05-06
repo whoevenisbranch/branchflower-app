@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -20,6 +20,20 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	db, err := Connect("app.db")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	defer db.Close()
+
+	if err = CreateTables(db); err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	repo := NewRepo(db)
 
 	fmt.Println("### Welcome to Branchflower App ###")
 	fmt.Println()
@@ -36,19 +50,16 @@ func main() {
 		return
 	}
 
-	fmt.Println("Please wait whilst we gather your activities...")
-
 	athlete, err := stravaClient.GetAthlete(context.Background())
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	activities, err := stravaClient.GetAllAthleteActivities(context.Background())
-
-	if errors.Is(err, ErrStravaAuthError) {
-		fmt.Println(err.Error())
-		return
+	user, err := repo.GetUserByStravaId(context.Background(), athlete.StravaId)
+	if errors.Is(err, sql.ErrNoRows) {
+		fmt.Printf("No existing user exists for strava id = %d, Creating new user...\n", athlete.StravaId)
+		user, err = repo.CreateUser(context.Background(), athlete)
 	}
 
 	if err != nil {
@@ -56,92 +67,69 @@ func main() {
 		return
 	}
 
-	fmt.Println()
+	user.Greet()
 
-	GreetAthlete(athlete)
+	if user.LastSyncAt == nil {
+		fmt.Println("Performing activity sync. Please wait..")
 
-	records := ProcessNewUserActivityBackfill(athlete.StravaId, activities)
-	PrintRecords(records)
+		activities, err := stravaClient.GetAllAthleteActivities(context.Background())
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 
-	// count := len(activities)
-	// if count > 0 {
-	// 	fmt.Printf("You have recorded %d activities on Strava!\n", count)
-	// 	fmt.Printf("Your first activity recorded was \"%s\"\n", activities[count-1].Name)
-	// 	fmt.Printf("Your most recent activity recorded was \"%s\"\n", activities[0].Name)
-	// } else {
-	// 	fmt.Printf("You have no recorded activities")
-	// }
+		pendingEntries := normaliseActivities(user.ID, activities)
 
-}
+		//Returns an error if not every activity is successfully sync'd
+		err = repo.AddDailyActivities(context.Background(), pendingEntries)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 
-func GreetAthlete(athlete Athlete) {
-	greeting := fmt.Sprintf("Welcome %s to Branchflower App!", athlete.FullName)
-
-	if athlete.Username != "" {
-		greeting += fmt.Sprintf(" Or should I say %s!", athlete.Username)
+		repo.SetUserLastSync(context.Background(), user.ID)
+		fmt.Println("Activity sync completed successfully!")
 	}
 
-	fmt.Println(greeting)
+	fmt.Println(repo.CountTotalActiveDaysById(context.Background(), user.ID))
+
+	now := time.Now().UTC()
+	from := time.Date(now.Year(), now.Month(), now.Day()-7, 0, 0, 0, 0, time.UTC)
+	to := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	weeklyActiveDays, err := repo.FilterUserActiveDays(context.Background(), user.ID, from, to)
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	fmt.Println(len(weeklyActiveDays))
+	fmt.Println(weeklyActiveDays[len(weeklyActiveDays)-1].MovingTimeSeconds)
 }
 
-func ProcessNewUserActivityBackfill(id int, activities []Activity) map[time.Time]DailyActivityRecord {
+func normaliseActivities(userID int, activities []Activity) map[time.Time]DailyActivity {
 
-	totalMovingTime := 0.0
-	dailyRecords := make(map[time.Time]DailyActivityRecord)
+	records := make(map[time.Time]DailyActivity)
 
 	for _, activity := range activities {
 
-		start := activity.StartTimestamp
+		year, month, day := activity.StartTimestamp.Date()
+		date := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 
-		date := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
-
-		record, ok := dailyRecords[date]
+		record, ok := records[date]
 
 		if !ok {
-
-			record = DailyActivityRecord{
-				StravaId: id,
-				Date:     date,
+			record = DailyActivity{
+				UserID: userID,
+				Date:   date,
 			}
 		}
 
-		totalMovingTime += activity.MovingTime
-
-		record.TotalMovingTime += activity.MovingTime
-		record.TotalActivities++
-		record.LastUpdatedAt = time.Now().Unix()
-		dailyRecords[date] = record
+		record.MovingTimeSeconds += activity.MovingTimeSeconds
+		record.ActivityCount++
+		records[date] = record
 	}
 
-	fmt.Printf("Total Profile moving time: %.2fH\n", totalMovingTime/3600)
-
-	return dailyRecords
-}
-
-func PrintRecords(records map[time.Time]DailyActivityRecord) {
-
-	fmt.Printf("Total active days: %d\n", len(records))
-
-	keys := []time.Time{}
-	for key := range records {
-		keys = append(keys, key)
-	}
-
-	// Sort ascending by date
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].Before(keys[j])
-	})
-
-	for _, key := range keys {
-		record := records[key]
-		fmt.Printf("Date: %v; Activity Count:%d TotalMovingTime: %.2f, LastUpdatedAt: %v\n", record.Date, record.TotalActivities, record.TotalMovingTime, record.LastUpdatedAt)
-	}
-}
-
-type DailyActivityRecord struct {
-	StravaId        int
-	Date            time.Time
-	TotalMovingTime float64 //seconds
-	TotalActivities int
-	LastUpdatedAt   int64 //the last time the record was updates
+	return records
 }
