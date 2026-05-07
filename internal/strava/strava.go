@@ -13,6 +13,7 @@ import (
 
 	"github.com/whoevenisbranch/branchflower/internal/models"
 	"github.com/whoevenisbranch/branchflower/internal/oauth"
+	"github.com/whoevenisbranch/branchflower/internal/utility"
 )
 
 const numActivitiesPerPage = 200
@@ -105,7 +106,7 @@ func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) ([]models.A
 }
 
 func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, error) {
-	defer timeCheck(time.Now())
+	defer utility.TimeCheck("GET", time.Now())
 
 	var zero T
 
@@ -181,13 +182,6 @@ func handleResponse[T any](response *http.Response) (T, error) {
 	default:
 		return zero, ErrUnrecognisedStatusCode
 	}
-}
-
-//Utility
-
-func timeCheck(start time.Time) {
-	elapsed := time.Since(start).Seconds()
-	log.Printf("Completed in %.2fs\n", elapsed)
 }
 
 //Athlete

@@ -31,7 +31,7 @@ func (a *app) Run(ctx context.Context) error {
 
 	user.Greet()
 
-	if user.LastSyncAt == nil || time.Since(*user.LastSyncAt) > 24*time.Hour {
+	if user.LastSyncAt == nil || time.Since(*user.LastSyncAt) > 6*time.Hour {
 		if err = a.service.SyncActivities(ctx, *user); err != nil {
 			return err
 		}

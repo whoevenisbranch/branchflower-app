@@ -9,6 +9,7 @@ import (
 
 	"github.com/whoevenisbranch/branchflower/internal/models"
 	"github.com/whoevenisbranch/branchflower/internal/strava"
+	"github.com/whoevenisbranch/branchflower/internal/utility"
 )
 
 //
@@ -25,6 +26,7 @@ func NewRepo(db *sql.DB) Repo {
 
 // User Queries
 func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.User, error) {
+	defer utility.TimeCheck("repo.CreateUser", time.Now())
 
 	var err error
 
@@ -55,6 +57,7 @@ func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.
 }
 
 func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*models.User, error) {
+	defer utility.TimeCheck("repo.GetUserByStravaId", time.Now())
 
 	var u models.User
 	var err error
@@ -72,6 +75,7 @@ func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*models.Use
 }
 
 func (r *Repo) SetUserLastSync(ctx context.Context, userID int) error {
+	defer utility.TimeCheck("repo.SetUserLastSync", time.Now())
 
 	var err error
 
@@ -99,6 +103,7 @@ func (r *Repo) SetUserLastSync(ctx context.Context, userID int) error {
 //
 
 func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]models.DailyActivity) error {
+	defer utility.TimeCheck("repo.AddDailyActivities", time.Now())
 
 	expected := len(activites)
 	var actual = 0
@@ -138,6 +143,7 @@ func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]m
 }
 
 func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) (int, error) {
+	defer utility.TimeCheck("repo.CountTotalActiveDaysById", time.Now())
 
 	var count int
 	var err error
@@ -155,6 +161,7 @@ func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) (int, e
 }
 
 func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to time.Time) ([]models.DailyActivity, error) {
+	defer utility.TimeCheck("repo.FilterUserActiveDays", time.Now())
 
 	var records []models.DailyActivity
 	var err error
