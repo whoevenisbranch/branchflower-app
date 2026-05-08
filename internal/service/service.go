@@ -78,25 +78,27 @@ func (s *Service) SyncActivities(ctx context.Context, userID int) error {
 
 }
 
-func (s *Service) GetReport(ctx context.Context, userID int) (Report, error) {
+func (s *Service) GetUserTreeData(ctx context.Context, userID int) (TreeData, error) {
 	totalRunDays, err := s.repo.CountTotalActiveDaysById(ctx, userID)
 	if err != nil {
-		return Report{}, err
+		return TreeData{}, err
 	}
 
 	start, end := calculateStatWindow()
 
 	windowActiveDaysMap, err := s.repo.FilterUserActiveDays(ctx, userID, start, end)
 	if err != nil {
-		return Report{}, err
+		return TreeData{}, err
 	}
 
 	orderedWindow := densifyAndOrderDateDescMap(end, windowActiveDaysMap)
 
 	baseScores := scoring.DeriveBaseScores(totalRunDays, orderedWindow)
+	uiScores := scoring.DeriveUIScores(baseScores)
 
-	return Report{
+	return TreeData{
 		BaseScores: baseScores,
+		UIScores:   uiScores,
 	}, nil
 }
 

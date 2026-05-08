@@ -6,7 +6,7 @@ import (
 	"github.com/whoevenisbranch/branchflower/internal/scoring"
 )
 
-type Report struct {
+type TreeData struct {
 	BaseScores  scoring.BaseScores
 	UIScores    scoring.UIScores
 	GeneratedAt time.Time

@@ -1,7 +1,6 @@
 package scoring
 
 import (
-	"log"
 	"math"
 
 	"github.com/whoevenisbranch/branchflower/internal/repo"
@@ -21,13 +20,13 @@ func DeriveBaseScores(totalRunDays int, bucket []repo.DailyAggregate) BaseScores
 	derived.display()
 
 	var base BaseScores
-	base.activeRunDays = totalRunDays
+	base.History = clamp(float64(totalRunDays), 0, 1)
 	base = calculateCanopyScores(&derived)
 
 	trendSignal := calculateTrend(&derived)
-	treeState := classifyTreeState(base.fullness, base.vitality, trendSignal)
+	treeState := classifyTreeState(base.Fullness, base.Vitality, trendSignal)
 
-	base.state = treeState
+	base.State = treeState
 
 	return base
 
@@ -37,25 +36,25 @@ func calculateCanopyScores(derived *derivedAggregates) BaseScores {
 
 	var score BaseScores
 
-	volumeScore := Clamp(derived.currCanopyHrs/max(derived.expectedCanopyHrs, 1.0), 0.0, 2.0)
+	volumeScore := clamp(derived.currCanopyHrs/max(derived.expectedCanopyHrs, 1.0), 0.0, 2.0)
 
 	consistencyScore := min(float64(derived.currCanopyActiveDays), canopyActiveDaysCap) / canopyActiveDaysCap
 
 	momentum := (derived.recentHalfCanopyHrs - derived.olderHalfCanopyHrs) / max(derived.olderHalfCanopyHrs, 1.0)
-	momentumScore := Clamp(momentum, -1.0, 1.0)
+	momentumScore := clamp(momentum, -1.0, 1.0)
 	normalisedMomentum := (momentumScore + 1.0) / 2
 
 	canopyScore := (0.45 * volumeScore) + (0.35 * consistencyScore) + (0.2 * normalisedMomentum)
 
-	fullness := Clamp(canopyScore, 0.0, 1.0)
+	Fullness := clamp(canopyScore, 0.0, 1.0)
 
-	stability := Clamp(1.0-math.Abs(normalisedMomentum), 0.2, 1.0)
+	Stability := clamp(1.0-math.Abs(normalisedMomentum), 0.2, 1.0)
 
-	vitality := (0.6 * consistencyScore) + (0.4 * min(volumeScore, 1.0))
+	Vitality := (0.6 * consistencyScore) + (0.4 * min(volumeScore, 1.0))
 
-	score.fullness = fullness
-	score.stability = stability
-	score.vitality = vitality
+	score.Fullness = Fullness
+	score.Stability = Stability
+	score.Vitality = Vitality
 
 	return score
 }
@@ -132,22 +131,22 @@ func calculateTrend(derived *derivedAggregates) float64 {
 	var trendSignal float64
 
 	diffHours := derived.currCanopyHrs - derived.prevCanopyHrs
-	canopyHoursTrend := Clamp(diffHours/max(derived.prevCanopyHrs, 1.0), -1.0, 1.0)
+	canopyHoursTrend := clamp(diffHours/max(derived.prevCanopyHrs, 1.0), -1.0, 1.0)
 
 	diffDays := float64(derived.currCanopyActiveDays - derived.prevCanopyActiveDays)
-	canopyActiveDayTrend := Clamp(diffDays/28, -1.0, 1.0)
+	canopyActiveDayTrend := clamp(diffDays/28, -1.0, 1.0)
 
 	trendSignal = (0.7 * canopyHoursTrend) + (0.3 * canopyActiveDayTrend)
 
 	return trendSignal
 }
 
-func classifyTreeState(fullness, vitality, trendSignal float64) string {
+func classifyTreeState(Fullness, Vitality, trendSignal float64) string {
 	var state string
 
-	if fullness < 0.3 && vitality < 0.35 {
+	if Fullness < 0.3 && Vitality < 0.35 {
 		state = "resting"
-	} else if fullness >= 0.7 && vitality >= 0.6 && trendSignal >= -0.15 {
+	} else if Fullness >= 0.7 && Vitality >= 0.6 && trendSignal >= -0.15 {
 		state = "flourishing"
 	} else if trendSignal > 0.15 {
 		state = "budding"
@@ -160,7 +159,49 @@ func classifyTreeState(fullness, vitality, trendSignal float64) string {
 	return state
 }
 
-func Clamp(val, lo, hi float64) float64 {
+func DeriveUIScores(baseScores BaseScores) UIScores {
+
+	var uiScores UIScores
+
+	trunk := getUITrunkValues(baseScores.History)
+	canopy := getUICanopyValues(baseScores)
+
+	uiScores.Trunk = trunk
+	uiScores.Canopy = canopy
+	uiScores.Palette = baseScores.State
+
+	return uiScores
+}
+
+func getUITrunkValues(historyScore float64) trunk {
+
+	var t trunk
+
+	t.Height = lerp(80, 180, historyScore)
+	t.Width = lerp(16, 36, math.Sqrt(historyScore))
+
+	return t
+}
+
+func getUICanopyValues(scores BaseScores) canopy {
+
+	var c canopy
+
+	c.RadiusX = lerp(45, 90, scores.Fullness)
+	c.RadiusY = lerp(45, 75, scores.Fullness)
+
+	c.Density = lerp(0.25, 1.0, scores.Fullness)
+
+	c.Smoothness = lerp(0.2, 1.0, scores.Stability)
+
+	c.Saturation = lerp(35, 75, scores.Vitality)
+	c.Lightness = lerp(36, 48, scores.Vitality)
+
+	return c
+
+}
+
+func clamp(val, lo, hi float64) float64 {
 	if val < lo {
 		return lo
 	}
@@ -172,38 +213,6 @@ func Clamp(val, lo, hi float64) float64 {
 	return val
 }
 
-type BaseScores struct {
-	activeRunDays int
-	fullness      float64
-	stability     float64
-	vitality      float64
-	state         string
-}
-
-func (base *BaseScores) Display() {
-	log.Printf("Fullness Score: %.2f", base.fullness)
-	log.Printf("Stability Score: %.2f", base.stability)
-	log.Printf("Vitality Score: %.2f", base.vitality)
-	log.Printf("State: %s", base.state)
-}
-
-type derivedAggregates struct {
-	currCanopyActiveDays int
-	currCanopyHrs        float64
-	prevCanopyActiveDays int
-	prevCanopyHrs        float64
-	recentHalfCanopyHrs  float64
-	olderHalfCanopyHrs   float64
-	baselineAvgDailyHrs  float64
-	expectedCanopyHrs    float64
-}
-
-func (da *derivedAggregates) display() {
-	log.Printf("Active Days in Current Canopy Window = %d", da.currCanopyActiveDays)
-	log.Printf("Active Days in Previous Canopy Window = %d", da.prevCanopyActiveDays)
-
-	log.Printf("Baseline Average Daily Hours = %.2f", da.baselineAvgDailyHrs)
-	log.Printf("Expected Canopy Hours = %.2f", da.expectedCanopyHrs)
-	log.Printf("Current Canopy Hours = %.2f [1st: %.2f, 2nd:%.2f]", da.currCanopyHrs, da.recentHalfCanopyHrs, da.olderHalfCanopyHrs)
-	log.Printf("Previous Canopy Hours = %.2f", da.prevCanopyHrs)
+func lerp(start, end, factor float64) float64 {
+	return start + (end-start)*factor
 }

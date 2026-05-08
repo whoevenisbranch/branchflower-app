@@ -39,12 +39,13 @@ func (app *application) Run(ctx context.Context) error {
 		}
 	}
 
-	report, err := app.svc.GetReport(ctx, user.ID)
+	report, err := app.svc.GetUserTreeData(ctx, user.ID)
 	if err != nil {
 		return err
 	}
 
 	report.BaseScores.Display()
+	report.UIScores.Display()
 
 	return nil
 }
