@@ -109,7 +109,7 @@ func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]m
 	var actual = 0
 
 	stmt, err := r.db.PrepareContext(ctx,
-		`INSERT INTO daily_activities 
+		`INSERT INTO daily_activities_runs 
 		(user_id, date, activity_count, moving_time_seconds, last_updated) 
 		VALUES (?, ?, ?, ?, ?)
 		`)
@@ -149,7 +149,7 @@ func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) (int, e
 	var err error
 
 	err = r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM daily_activities WHERE user_id = ?`, userId,
+		`SELECT COUNT(*) FROM daily_activities_runs WHERE user_id = ?`, userId,
 	).Scan(&count)
 
 	if err != nil {
@@ -160,15 +160,15 @@ func (r *Repo) CountTotalActiveDaysById(ctx context.Context, userId int) (int, e
 
 }
 
-func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to time.Time) ([]models.DailyActivity, error) {
+func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to time.Time) (map[time.Time]DailyAggregate, error) {
 	defer utility.TimeCheck("repo.FilterUserActiveDays", time.Now())
 
-	var records []models.DailyActivity
+	var records = make(map[time.Time]DailyAggregate)
 	var err error
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT *
-		FROM daily_activities
+		SELECT date, activity_count, moving_time_seconds
+		FROM daily_activities_runs
 		WHERE user_id = ? AND date >= ? AND date <= ?
 		ORDER BY date ASC`, userID, from, to)
 
@@ -178,21 +178,26 @@ func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to ti
 	defer rows.Close()
 
 	for rows.Next() {
-		var activity models.DailyActivity
+		var date time.Time
+		var agg DailyAggregate
+
 		err = rows.Scan(
-			&activity.ID,
-			&activity.UserID,
-			&activity.Date,
-			&activity.ActivityCount,
-			&activity.MovingTimeSeconds,
-			&activity.LastUpdatedAt)
+			&date,
+			&agg.ActivityCount,
+			&agg.MovingTimeSeconds,
+		)
 
 		if err != nil {
 			return records, err
 		}
 
-		records = append(records, activity)
+		records[date] = agg
 	}
 
 	return records, nil
+}
+
+type DailyAggregate struct {
+	ActivityCount     int
+	MovingTimeSeconds int
 }

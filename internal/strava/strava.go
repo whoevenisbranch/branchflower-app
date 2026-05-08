@@ -231,6 +231,7 @@ func (sa stravaActivitiesDTO) ToActivies() []models.Activity {
 		bucket = append(bucket, models.Activity{
 			Id:                activity.ID,
 			Name:              activity.Name,
+			Type:              activity.SportType,
 			StartTimestamp:    activity.StartDate,
 			MovingTimeSeconds: activity.MovingTimeSeconds,
 		})

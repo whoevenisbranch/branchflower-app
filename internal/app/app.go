@@ -38,6 +38,9 @@ func (a *app) Run(ctx context.Context) error {
 	}
 
 	a.service.GetReport(ctx, *user)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -29,6 +29,7 @@ type DailyActivity struct {
 type Activity struct {
 	Id                int64
 	Name              string
+	Type              string
 	StartTimestamp    time.Time
 	MovingTimeSeconds int
 }

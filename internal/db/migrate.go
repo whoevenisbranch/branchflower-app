@@ -16,7 +16,7 @@ func Migrate(db *sql.DB) error {
     );`
 
 	dailyActivityTable := `
-    CREATE TABLE IF NOT EXISTS daily_activities (
+    CREATE TABLE IF NOT EXISTS daily_activities_runs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         date DATETIME NOT NULL,
