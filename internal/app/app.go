@@ -8,23 +8,25 @@ import (
 	"github.com/whoevenisbranch/branchflower/internal/service"
 )
 
-type app struct {
-	service service.Service
+type application struct {
+	svc service.Service
 }
 
-func NewApp(service service.Service) *app {
-	return &app{
-		service: service,
+func NewApp(service service.Service) *application {
+	return &application{
+		svc: service,
 	}
 }
 
-func (a *app) Run(ctx context.Context) error {
+func (app *application) Run(ctx context.Context) error {
+
+	//TODO: this is where the API will be served from
 
 	var err error
 
 	log.Println("### Welcome to Branchflower App ###")
 
-	user, err := a.service.GetUser(ctx)
+	user, err := app.svc.GetUser(ctx)
 	if err != nil {
 		return err
 	}
@@ -32,15 +34,17 @@ func (a *app) Run(ctx context.Context) error {
 	user.Greet()
 
 	if user.LastSyncAt == nil || time.Since(*user.LastSyncAt) > 6*time.Hour {
-		if err = a.service.SyncActivities(ctx, *user); err != nil {
+		if err = app.svc.SyncActivities(ctx, user.ID); err != nil {
 			return err
 		}
 	}
 
-	a.service.GetReport(ctx, *user)
+	report, err := app.svc.GetReport(ctx, user.ID)
 	if err != nil {
 		return err
 	}
+
+	report.BaseScores.Display()
 
 	return nil
 }

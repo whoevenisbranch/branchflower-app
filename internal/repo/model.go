@@ -1,4 +1,4 @@
-package models
+package repo
 
 import (
 	"log"
@@ -31,5 +31,10 @@ type Activity struct {
 	Name              string
 	Type              string
 	StartTimestamp    time.Time
+	MovingTimeSeconds int
+}
+
+type DailyAggregate struct {
+	ActivityCount     int
 	MovingTimeSeconds int
 }

@@ -7,8 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/whoevenisbranch/branchflower/internal/models"
-	"github.com/whoevenisbranch/branchflower/internal/strava"
 	"github.com/whoevenisbranch/branchflower/internal/utility"
 )
 
@@ -25,7 +23,7 @@ func NewRepo(db *sql.DB) Repo {
 }
 
 // User Queries
-func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.User, error) {
+func (r *Repo) CreateUser(ctx context.Context, stravaID int, name string) (*User, error) {
 	defer utility.TimeCheck("repo.CreateUser", time.Now())
 
 	var err error
@@ -34,7 +32,7 @@ func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.
 
 	result, err := r.db.ExecContext(ctx,
 		`INSERT INTO users (strava_id, first_name, created_at)
-		VALUES (?, ?, ?)`, athlete.StravaId, athlete.FirstName, now,
+		VALUES (?, ?, ?)`, stravaID, name, now,
 	)
 	if err != nil {
 		return nil, err
@@ -47,19 +45,19 @@ func (r *Repo) CreateUser(ctx context.Context, athlete strava.Athlete) (*models.
 
 	log.Printf("Created user: %d\n", id)
 
-	return &models.User{
+	return &User{
 		ID:        int(id),
-		StravaID:  athlete.StravaId,
-		FirstName: athlete.FirstName,
+		StravaID:  stravaID,
+		FirstName: name,
 		CreatedAt: now,
 	}, nil
 
 }
 
-func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*models.User, error) {
+func (r *Repo) GetUserByStravaId(ctx context.Context, stravaID int) (*User, error) {
 	defer utility.TimeCheck("repo.GetUserByStravaId", time.Now())
 
-	var u models.User
+	var u User
 	var err error
 
 	err = r.db.QueryRowContext(ctx,
@@ -102,7 +100,7 @@ func (r *Repo) SetUserLastSync(ctx context.Context, userID int) error {
 // Daily Activity Queries
 //
 
-func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]models.DailyActivity) error {
+func (r *Repo) AddDailyActivities(ctx context.Context, activites map[time.Time]DailyActivity) error {
 	defer utility.TimeCheck("repo.AddDailyActivities", time.Now())
 
 	expected := len(activites)
@@ -195,9 +193,4 @@ func (r *Repo) FilterUserActiveDays(ctx context.Context, userID int, from, to ti
 	}
 
 	return records, nil
-}
-
-type DailyAggregate struct {
-	ActivityCount     int
-	MovingTimeSeconds int
 }
