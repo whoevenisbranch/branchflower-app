@@ -122,8 +122,8 @@ func deriveTreeStats(bucket []repo.DailyAggregate) {
 	trendSignal := calculateTrend(&derived)
 	log.Printf("Trend Signal: %.2f", trendSignal)
 
-	season := classifySeason(canopyScores.fullness, canopyScores.vitality, trendSignal)
-	log.Printf("Derived Season: %s", season)
+	treeState := classifyTreeState(canopyScores.fullness, canopyScores.vitality, trendSignal)
+	log.Printf("Derived Tree State: %s", treeState)
 }
 
 func calculateCanopyScores(derived *derivedAggregates) canopyScore {
@@ -239,19 +239,22 @@ func calculateTrend(derived *derivedAggregates) float64 {
 	return trendSignal
 }
 
-func classifySeason(fullness, vitality, trendSignal float64) string {
-	var season string
-	if fullness > 0.3 && vitality < 0.35 {
-		season = "winter"
-	} else if trendSignal > 0.15 {
-		season = "spring"
+func classifyTreeState(fullness, vitality, trendSignal float64) string {
+	var state string
+
+	if fullness < 0.3 && vitality < 0.35 {
+		state = "resting"
 	} else if fullness >= 0.7 && vitality >= 0.6 && trendSignal >= -0.15 {
-		season = "summer"
+		state = "flourishing"
+	} else if trendSignal > 0.15 {
+		state = "budding"
+	} else if trendSignal < -0.15 {
+		state = "thinning"
 	} else {
-		season = "autumn"
+		state = "steady"
 	}
 
-	return season
+	return state
 }
 
 func densifyAndOrderDateDescMap(end time.Time, sparseMap map[time.Time]repo.DailyAggregate) []repo.DailyAggregate {
@@ -326,8 +329,8 @@ type derivedAggregates struct {
 	currCanopyHrs        float64
 	prevCanopyActiveDays int
 	prevCanopyHrs        float64
-	recentHalfCanopyHrs   float64
-	olderHalfCanopyHrs  float64
+	recentHalfCanopyHrs  float64
+	olderHalfCanopyHrs   float64
 	baselineAvgDailyHrs  float64
 	expectedCanopyHrs    float64
 }
