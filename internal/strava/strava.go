@@ -1,13 +1,21 @@
-package main
+package strava
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
+
+	"github.com/whoevenisbranch/branchflower/internal/oauth"
+	"github.com/whoevenisbranch/branchflower/internal/utility"
 )
+
+const numActivitiesPerPage = 200
 
 type StravaClient struct {
 	httpClient  *http.Client
@@ -15,18 +23,24 @@ type StravaClient struct {
 	accessToken string
 }
 
-func NewStravaClient(baseURL, accessToken string) (*StravaClient, error) {
+func NewStravaClient(baseURL string) (*StravaClient, error) {
 
 	if baseURL == "" {
 		return nil, ErrStravaClientMissingBaseURL
 	}
+
+	accessToken, err := oauth.FetchAccessToken()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if accessToken == "" {
 		return nil, ErrStravaClientMissingAccessToken
 	}
 
 	return &StravaClient{
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 20 * time.Second,
 		},
 		baseURL:     baseURL,
 		accessToken: accessToken,
@@ -34,24 +48,66 @@ func NewStravaClient(baseURL, accessToken string) (*StravaClient, error) {
 }
 
 func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
-	dto, err := get[StravaAthleteDTO](sc, ctx, "/athlete")
+
+	baseUrl := sc.baseURL + "/athlete"
+
+	endpoint, err := url.Parse(baseUrl)
+	if err != nil {
+		return Athlete{}, err
+	}
+
+	dto, err := get[stravaAthleteDTO](sc, ctx, endpoint.String())
 	if err != nil {
 		return Athlete{}, err
 	}
 	return dto.ToAthlete(), nil
 }
 
-func (sc *StravaClient) GetAthleteActivities(ctx context.Context) ([]Activity, error) {
-	dto, err := get[StravaActivitiesDTO](sc, ctx, "/athlete/activities")
+func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) (StravaActivitiesDTO, error) {
+
+	baseUrl := sc.baseURL + "/athlete/activities"
+	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
-		return []Activity{}, err
+		return StravaActivitiesDTO{}, err
 	}
-	return dto.ToActivies(), nil
+
+	queryParams := url.Values{}
+	queryParams.Set("per_page", strconv.Itoa(numActivitiesPerPage))
+
+	//protect against activity uploaded during collection
+	queryParams.Set("before", strconv.FormatInt(time.Now().Unix(), 10))
+
+	bucket := StravaActivitiesDTO{}
+	pageCounter := 1
+
+	for {
+		queryParams.Set("page", strconv.Itoa(pageCounter))
+		endpoint.RawQuery = queryParams.Encode()
+
+		dto, err := get[StravaActivitiesDTO](sc, ctx, endpoint.String())
+		if err != nil {
+			return StravaActivitiesDTO{}, err
+		}
+
+		bucket = append(bucket, dto...)
+
+		//no next page to query
+		if len(dto) < numActivitiesPerPage {
+			break
+		}
+
+		pageCounter++
+	}
+
+	return bucket, nil
 }
 
 func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, error) {
+	defer utility.TimeCheck("GET", time.Now())
 
 	var zero T
+
+	log.Printf("Requesting: %s", endpoint)
 
 	request, err := sc.buildHTTPRequest(endpoint, ctx)
 	if err != nil {
@@ -74,9 +130,7 @@ func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, erro
 
 func (sc *StravaClient) buildHTTPRequest(endpoint string, ctx context.Context) (*http.Request, error) {
 
-	url := baseStravaURL + endpoint
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 
 	if err != nil {
 		return nil, err
@@ -92,6 +146,9 @@ func (sc *StravaClient) buildHTTPRequest(endpoint string, ctx context.Context) (
 }
 
 func handleResponse[T any](response *http.Response) (T, error) {
+
+	var zero T
+
 	statusCode := response.StatusCode
 
 	switch {
@@ -100,82 +157,28 @@ func handleResponse[T any](response *http.Response) (T, error) {
 		var t T
 		err := json.NewDecoder(response.Body).Decode(&t)
 		if err != nil {
-			return *new(T), err
+			return zero, err
 		}
 		return t, nil
 
 	case statusCode == http.StatusUnauthorized:
-		return *new(T), APIError{
+		return zero, APIError{
 			Code:    statusCode,
 			Message: ErrStravaAuthError.Error(),
 		}
 
 	case statusCode >= 400 && statusCode < 500:
-		return *new(T), APIError{
+		return zero, APIError{
 			Code:    statusCode,
 			Message: ErrStravaAuthError.Error(),
 		}
 
 	case statusCode == http.StatusTooManyRequests || statusCode >= 500:
-		return *new(T), ErrRecoverableServerError
+		return zero, ErrRecoverableServerError
 
 	default:
-		return *new(T), ErrUnrecognisedStatusCode
+		return zero, ErrUnrecognisedStatusCode
 	}
-}
-
-//Athlete
-
-type StravaAthleteDTO struct {
-	ID        int    `json:"id"`
-	Username  string `json:"username"`
-	FirstName string `json:"firstname"`
-	LastName  string `json:"lastname"`
-	//TODO: missing fields from the api
-}
-
-type Athlete struct {
-	FullName string
-	Username string
-}
-
-func (sa StravaAthleteDTO) ToAthlete() Athlete {
-	return Athlete{
-		FullName: fmt.Sprintf("%s %s", sa.FirstName, sa.LastName),
-		Username: sa.Username,
-	}
-}
-
-// Activities
-
-type StravaSummaryActivityDTO struct {
-	ID                 int64   `json:"id"`
-	Name               string  `json:"name"`
-	Distance           float64 `json:"distance"`
-	MovingTime         float64 `json:"moving_time"`
-	ElapsedTime        float64 `json:"elapsed_time"`
-	TotalElevationGain float64 `json:"total_elevation_gain"`
-	SportType          string  `json:"sport_type"`
-}
-type StravaActivitiesDTO []StravaSummaryActivityDTO
-
-type Activity struct {
-	Id   int64
-	Name string
-}
-
-func (sa StravaActivitiesDTO) ToActivies() []Activity {
-
-	var bucket []Activity
-
-	for _, activity := range sa {
-		bucket = append(bucket, Activity{
-			Id:   activity.ID,
-			Name: activity.Name,
-		})
-	}
-
-	return bucket
 }
 
 // Error handling
@@ -186,12 +189,3 @@ var ErrStravaAuthError = errors.New("Strava Authentication Error.")
 var ErrUnrecoverableClientError = errors.New("Unrecoverable Client Error.")
 var ErrRecoverableServerError = errors.New("Recoverable Strava Server Error.")
 var ErrUnrecognisedStatusCode = errors.New("Received Unexpected Status Code.")
-
-type APIError struct {
-	Code    int
-	Message string
-}
-
-func (e APIError) Error() string {
-	return fmt.Sprintf("API error: status=%d message=%s", e.Code, e.Message)
-}

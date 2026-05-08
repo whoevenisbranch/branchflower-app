@@ -1,4 +1,4 @@
-package main
+package oauth
 
 import (
 	"context"
@@ -10,18 +10,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-
-	"github.com/pkg/browser"
 )
 
 const (
-	requiredScopes = "read,activity:read"
+	requiredScopes = "read,activity:read_all"
 
 	stravaAuthURL  = "http://www.strava.com/oauth/authorize"
 	stravaTokenURL = "https://www.strava.com/oauth/token"
 )
 
-func fetchAccessToken() (string, error) {
+func FetchAccessToken() (string, error) {
 
 	code := ""
 
@@ -67,8 +65,6 @@ func fetchAccessToken() (string, error) {
 
 	printRedirectHelp(authURL)
 
-	_ = browser.OpenURL(authURL)
-
 	server := &http.Server{Addr: ":8085"}
 	// go routine for shutting down the server
 	go func() {
@@ -92,15 +88,13 @@ func fetchAccessToken() (string, error) {
 }
 
 func printRedirectHelp(url string) {
-	fmt.Println()
-	fmt.Println("Attempting to open browser for authentication.")
-	fmt.Println("If you are not redirected to the browser, use this link:")
-	fmt.Println(url)
-	fmt.Println()
+	log.Println("To continue you must first authenticate yourself with Strava and accept the requested scopes...")
+	log.Println("Please copy the following link into your browser, and follow the on-screen prompts...")
+	log.Println("Link: " + url)
 
 }
 
-func exchangeCodeForToken(clientId, secret, code, grantType string) (AuthResponse, error) {
+func exchangeCodeForToken(clientId, secret, code, grantType string) (authResponse, error) {
 
 	form := url.Values{}
 	form.Set("client_id", clientId)
@@ -110,26 +104,26 @@ func exchangeCodeForToken(clientId, secret, code, grantType string) (AuthRespons
 
 	resp, err := http.PostForm(stravaTokenURL, form)
 	if err != nil {
-		return AuthResponse{}, err
+		return authResponse{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return AuthResponse{}, errors.New("token exchange failed")
+		return authResponse{}, errors.New("token exchange failed")
 	}
 
-	var t AuthResponse
+	var t authResponse
 	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
-		return AuthResponse{}, err
+		return authResponse{}, err
 	}
 
-	token := AuthResponse{
+	token := authResponse{
 		AccessToken: t.AccessToken,
 	}
 
 	return token, nil
 }
 
-type AuthResponse struct {
+type authResponse struct {
 	AccessToken string `json:"access_token"`
 }
