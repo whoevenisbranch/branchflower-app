@@ -1,4 +1,4 @@
-package service
+package tree
 
 import (
 	"context"
@@ -7,33 +7,38 @@ import (
 	"log"
 	"time"
 
-	"github.com/whoevenisbranch/branchflower/internal/repo"
-	"github.com/whoevenisbranch/branchflower/internal/scoring"
+	"github.com/whoevenisbranch/branchflower/internal/storage"
 	"github.com/whoevenisbranch/branchflower/internal/strava"
 )
 
 type Service struct {
-	repo         repo.Repo
-	stravaClient *strava.StravaClient
+	userRepo     *storage.UserRepository
+	activityRepo *storage.ActivityRepository
 }
 
-func NewService(repo repo.Repo, stravaClient *strava.StravaClient) Service {
-	return Service{
-		repo:         repo,
-		stravaClient: stravaClient,
+func NewService(u *storage.UserRepository, a *storage.ActivityRepository) *Service {
+	return &Service{
+		userRepo:     u,
+		activityRepo: a,
 	}
 }
 
-func (s *Service) GetUser(ctx context.Context) (*repo.User, error) {
-	athlete, err := s.stravaClient.GetAthlete(ctx)
+func (s *Service) GetUser(ctx context.Context) (*storage.User, error) {
+
+	stravaClient, err := getAuthenticatedStravaClient()
 	if err != nil {
 		return nil, err
 	}
 
-	user, err := s.repo.GetUserByStravaId(ctx, athlete.StravaId)
+	athlete, err := stravaClient.GetAthlete(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.userRepo.GetUserByStravaId(ctx, athlete.StravaId)
 	if errors.Is(err, sql.ErrNoRows) {
 		log.Printf("No existing user exists for strava id = %d, Creating new user...\n", athlete.StravaId)
-		user, err = s.repo.CreateUser(ctx, athlete.StravaId, athlete.FirstName)
+		user, err = s.userRepo.CreateUser(ctx, athlete.StravaId, athlete.FirstName)
 	}
 
 	if err != nil {
@@ -46,14 +51,19 @@ func (s *Service) GetUser(ctx context.Context) (*repo.User, error) {
 func (s *Service) SyncActivities(ctx context.Context, userID int) error {
 	log.Println("Performing activity sync. Please wait..")
 
-	stravaActivities, err := s.stravaClient.GetAllAthleteActivities(ctx)
+	stravaClient, err := getAuthenticatedStravaClient()
+	if err != nil {
+		return err
+	}
+
+	stravaActivities, err := stravaClient.GetAllAthleteActivities(ctx)
 	if err != nil {
 		return err
 	}
 
 	activities := dtoToActivies(stravaActivities)
 
-	runs := make([]repo.Activity, 0, len(activities))
+	runs := make([]storage.Activity, 0, len(activities))
 	for _, v := range activities {
 		if v.Type == "Run" || v.Type == "TrailRun" || v.Type == "VirtualRun" {
 			runs = append(runs, v)
@@ -63,12 +73,12 @@ func (s *Service) SyncActivities(ctx context.Context, userID int) error {
 	pendingEntries := normaliseActivities(userID, runs)
 
 	//Returns an error if not every activity is successfully sync'd
-	err = s.repo.AddDailyActivities(ctx, pendingEntries)
+	err = s.activityRepo.AddDailyActivities(ctx, pendingEntries)
 	if err != nil {
 		return err
 	}
 
-	err = s.repo.SetUserLastSync(ctx, userID)
+	err = s.userRepo.SetUserLastSync(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -79,22 +89,22 @@ func (s *Service) SyncActivities(ctx context.Context, userID int) error {
 }
 
 func (s *Service) GetUserTreeData(ctx context.Context, userID int) (TreeData, error) {
-	totalRunDays, err := s.repo.CountTotalActiveDaysById(ctx, userID)
+	totalRunDays, err := s.activityRepo.CountTotalActiveDaysById(ctx, userID)
 	if err != nil {
 		return TreeData{}, err
 	}
 
 	start, end := calculateStatWindow()
 
-	windowActiveDaysMap, err := s.repo.FilterUserActiveDays(ctx, userID, start, end)
+	windowActiveDaysMap, err := s.activityRepo.FilterActiveDaysByUserID(ctx, userID, start, end)
 	if err != nil {
 		return TreeData{}, err
 	}
 
 	orderedWindow := densifyAndOrderDateDescMap(end, windowActiveDaysMap)
 
-	baseScores := scoring.DeriveBaseScores(totalRunDays, orderedWindow)
-	uiScores := scoring.DeriveUIScores(baseScores)
+	baseScores := deriveBaseScores(totalRunDays, orderedWindow)
+	uiScores := deriveUIScores(baseScores)
 
 	return TreeData{
 		BaseScores: baseScores,
@@ -106,22 +116,22 @@ func calculateStatWindow() (from, to time.Time) {
 	now := time.Now().UTC()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	length := scoring.CanopyWindowDays + scoring.BaselineWindowDays
+	length := CanopyWindowDays + BaselineWindowDays
 	from = today.AddDate(0, 0, -(length + 1)) //D0 -> D131
 
 	return from, today
 }
 
-func densifyAndOrderDateDescMap(end time.Time, sparseMap map[time.Time]repo.DailyAggregate) []repo.DailyAggregate {
-	capacity := scoring.CanopyWindowDays + scoring.BaselineWindowDays
-	slice := make([]repo.DailyAggregate, 0, capacity)
+func densifyAndOrderDateDescMap(end time.Time, sparseMap map[time.Time]storage.DailyAggregate) []storage.DailyAggregate {
+	capacity := CanopyWindowDays + BaselineWindowDays
+	slice := make([]storage.DailyAggregate, 0, capacity)
 
 	for i := range capacity {
 		date := end.AddDate(0, 0, -i)
 		val, ok := sparseMap[date]
 
 		if !ok {
-			val = repo.DailyAggregate{
+			val = storage.DailyAggregate{
 				ActivityCount:     0,
 				MovingTimeSeconds: 0,
 			}
@@ -133,9 +143,9 @@ func densifyAndOrderDateDescMap(end time.Time, sparseMap map[time.Time]repo.Dail
 	return slice
 }
 
-func normaliseActivities(userID int, activities []repo.Activity) map[time.Time]repo.DailyActivity {
+func normaliseActivities(userID int, activities []storage.Activity) map[time.Time]storage.DailyActivity {
 
-	records := make(map[time.Time]repo.DailyActivity)
+	records := make(map[time.Time]storage.DailyActivity)
 
 	for _, activity := range activities {
 
@@ -145,7 +155,7 @@ func normaliseActivities(userID int, activities []repo.Activity) map[time.Time]r
 		record, ok := records[date]
 
 		if !ok {
-			record = repo.DailyActivity{
+			record = storage.DailyActivity{
 				UserID: userID,
 				Date:   date,
 			}
@@ -159,12 +169,12 @@ func normaliseActivities(userID int, activities []repo.Activity) map[time.Time]r
 	return records
 }
 
-func dtoToActivies(sa strava.StravaActivitiesDTO) []repo.Activity {
+func dtoToActivies(sa strava.StravaActivitiesDTO) []storage.Activity {
 
-	var bucket []repo.Activity
+	var bucket []storage.Activity
 
 	for _, activity := range sa {
-		bucket = append(bucket, repo.Activity{
+		bucket = append(bucket, storage.Activity{
 			Id:                activity.ID,
 			Name:              activity.Name,
 			Type:              activity.SportType,
@@ -174,4 +184,17 @@ func dtoToActivies(sa strava.StravaActivitiesDTO) []repo.Activity {
 	}
 
 	return bucket
+}
+
+func getAuthenticatedStravaClient() (strava.StravaClient, error) {
+	// accessToken, err := oauth.FetchAccessToken()
+	// if err != nil {
+	// 	return strava.StravaClient{}, err
+	// }
+	// stravaClient, err := strava.NewStravaClient(accessToken)
+	// if err != nil {
+	// 	return strava.StravaClient{}, err
+	// }
+
+	return strava.StravaClient{}, nil
 }

@@ -11,45 +11,36 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/whoevenisbranch/branchflower/internal/oauth"
-	"github.com/whoevenisbranch/branchflower/internal/utility"
+	timeutils "github.com/whoevenisbranch/branchflower/internal/utility/time_utils"
 )
 
+const baseURL string = "https://www.strava.com/api/v3"
 const numActivitiesPerPage = 200
+
+var sharedHTTPClient *http.Client = &http.Client{
+	Timeout: 20 * time.Second,
+}
 
 type StravaClient struct {
 	httpClient  *http.Client
-	baseURL     string
 	accessToken string
 }
 
-func NewStravaClient(baseURL string) (*StravaClient, error) {
+func NewStravaClient(token string) (StravaClient, error) {
 
-	if baseURL == "" {
-		return nil, ErrStravaClientMissingBaseURL
+	if token == "" {
+		return StravaClient{}, ErrStravaClientMissingAccessToken
 	}
 
-	accessToken, err := oauth.FetchAccessToken()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if accessToken == "" {
-		return nil, ErrStravaClientMissingAccessToken
-	}
-
-	return &StravaClient{
-		httpClient: &http.Client{
-			Timeout: 20 * time.Second,
-		},
-		baseURL:     baseURL,
-		accessToken: accessToken,
+	return StravaClient{
+		httpClient:  sharedHTTPClient,
+		accessToken: token,
 	}, nil
 }
 
 func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 
-	baseUrl := sc.baseURL + "/athlete"
+	baseUrl := baseURL + "/athlete"
 
 	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
@@ -65,7 +56,7 @@ func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 
 func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) (StravaActivitiesDTO, error) {
 
-	baseUrl := sc.baseURL + "/athlete/activities"
+	baseUrl := baseURL + "/athlete/activities"
 	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
 		return StravaActivitiesDTO{}, err
@@ -103,7 +94,7 @@ func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) (StravaActi
 }
 
 func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, error) {
-	defer utility.TimeCheck("GET", time.Now())
+	defer timeutils.TimeCheck("GET", time.Now())
 
 	var zero T
 

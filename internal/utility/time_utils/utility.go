@@ -1,4 +1,4 @@
-package utility
+package timeutils
 
 import (
 	"log"

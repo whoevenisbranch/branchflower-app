@@ -1,11 +1,6 @@
-package db
+package storage
 
-import (
-	"database/sql"
-	"log"
-)
-
-func Migrate(db *sql.DB) error {
+func MigrateTables(db *DB) error {
 	userTable := `
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,14 +24,13 @@ func Migrate(db *sql.DB) error {
         UNIQUE(user_id, date) ON CONFLICT REPLACE
     );`
 
-	if _, err := db.Exec(userTable); err != nil {
+	if _, err := db.conn.Exec(userTable); err != nil {
 		return err
 	}
 
-	if _, err := db.Exec(dailyActivityTable); err != nil {
+	if _, err := db.conn.Exec(dailyActivityTable); err != nil {
 		return err
 	}
 
-	log.Println("Tables initialised successfully")
 	return nil
 }

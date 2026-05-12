@@ -1,129 +1,129 @@
 package oauth
 
-import (
-	"context"
-	"crypto/rand"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-)
+// import (
+// 	"context"
+// 	"crypto/rand"
+// 	"encoding/json"
+// 	"errors"
+// 	"fmt"
+// 	"log"
+// 	"net/http"
+// 	"net/url"
+// 	"os"
+// )
 
-const (
-	requiredScopes = "read,activity:read_all"
+// const (
+// 	requiredScopes = "read,activity:read_all"
 
-	stravaAuthURL  = "http://www.strava.com/oauth/authorize"
-	stravaTokenURL = "https://www.strava.com/oauth/token"
-)
+// 	stravaAuthURL  = "http://www.strava.com/oauth/authorize"
+// 	stravaTokenURL = "https://www.strava.com/oauth/token"
+// )
 
-func FetchAccessToken() (string, error) {
+// func FetchAccessToken() (string, error) {
 
-	code := ""
+// 	code := ""
 
-	clientId := os.Getenv("STRAVA_OAUTH_CLIENT_ID")
-	clientSecret := os.Getenv("STRAVA_OAUTH_CLIENT_SECRET")
-	callbackURL := os.Getenv("CALLBACK_URL")
+// 	clientId := os.Getenv("STRAVA_OAUTH_CLIENT_ID")
+// 	clientSecret := os.Getenv("STRAVA_OAUTH_CLIENT_SECRET")
+// 	callbackURL := os.Getenv("CALLBACK_URL")
 
-	if clientId == "" || clientSecret == "" || callbackURL == "" {
-		return "", fmt.Errorf("Missing: client id / secret / callback URL")
-	}
+// 	if clientId == "" || clientSecret == "" || callbackURL == "" {
+// 		return "", fmt.Errorf("Missing: client id / secret / callback URL")
+// 	}
 
-	//TODO: make stronger
-	state := fmt.Sprint(rand.Text())
+// 	//TODO: make stronger
+// 	state := fmt.Sprint(rand.Text())
 
-	q := url.Values{}
-	q.Set("client_id", clientId)
-	q.Set("redirect_uri", callbackURL)
-	q.Set("response_type", "code")
-	q.Set("approval_prompt", "force")
-	q.Set("scope", requiredScopes)
-	q.Set("state", state)
+// 	q := url.Values{}
+// 	q.Set("client_id", clientId)
+// 	q.Set("redirect_uri", callbackURL)
+// 	q.Set("response_type", "code")
+// 	q.Set("approval_prompt", "force")
+// 	q.Set("scope", requiredScopes)
+// 	q.Set("state", state)
 
-	authURL := stravaAuthURL + "?" + q.Encode()
+// 	authURL := stravaAuthURL + "?" + q.Encode()
 
-	closeChan := make(chan bool)
+// 	closeChan := make(chan bool)
 
-	// callback handler
-	http.HandleFunc("/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
+// 	// callback handler
+// 	http.HandleFunc("/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 
-		_ = r.ParseForm()
+// 		_ = r.ParseForm()
 
-		stateValue := r.FormValue("state")
-		acceptedScopes := r.FormValue("scope")
-		codeValue := r.FormValue("code")
-		if stateValue == state && acceptedScopes == requiredScopes && codeValue != "" {
-			code = codeValue
-		}
+// 		stateValue := r.FormValue("state")
+// 		acceptedScopes := r.FormValue("scope")
+// 		codeValue := r.FormValue("code")
+// 		if stateValue == state && acceptedScopes == requiredScopes && codeValue != "" {
+// 			code = codeValue
+// 		}
 
-		w.WriteHeader(http.StatusSeeOther)
-		w.Write([]byte("You may return to the terminal."))
-		closeChan <- true
-	})
+// 		w.WriteHeader(http.StatusSeeOther)
+// 		w.Write([]byte("You may return to the terminal."))
+// 		closeChan <- true
+// 	})
 
-	printRedirectHelp(authURL)
+// 	printRedirectHelp(authURL)
 
-	server := &http.Server{Addr: ":8085"}
-	// go routine for shutting down the server
-	go func() {
-		okToClose := <-closeChan
-		if okToClose {
-			if err := server.Shutdown(context.Background()); err != nil {
-				log.Println("Failed to shutdown server", err)
-			}
-		}
-	}()
+// 	server := &http.Server{Addr: ":8085"}
+// 	// go routine for shutting down the server
+// 	go func() {
+// 		okToClose := <-closeChan
+// 		if okToClose {
+// 			if err := server.Shutdown(context.Background()); err != nil {
+// 				log.Println("Failed to shutdown server", err)
+// 			}
+// 		}
+// 	}()
 
-	//Blocks until server is closed
-	server.ListenAndServe()
+// 	//Blocks until server is closed
+// 	server.ListenAndServe()
 
-	token, err := exchangeCodeForToken(clientId, clientSecret, code, "authorization_code")
-	if err != nil {
-		return "", fmt.Errorf("Unable to acquire Strava user token")
-	}
+// 	token, err := exchangeCodeForToken(clientId, clientSecret, code, "authorization_code")
+// 	if err != nil {
+// 		return "", fmt.Errorf("Unable to acquire Strava user token")
+// 	}
 
-	return token.AccessToken, nil
-}
+// 	return token.AccessToken, nil
+// }
 
-func printRedirectHelp(url string) {
-	log.Println("To continue you must first authenticate yourself with Strava and accept the requested scopes...")
-	log.Println("Please copy the following link into your browser, and follow the on-screen prompts...")
-	log.Println("Link: " + url)
+// func printRedirectHelp(url string) {
+// 	log.Println("To continue you must first authenticate yourself with Strava and accept the requested scopes...")
+// 	log.Println("Please copy the following link into your browser, and follow the on-screen prompts...")
+// 	log.Println("Link: " + url)
 
-}
+// }
 
-func exchangeCodeForToken(clientId, secret, code, grantType string) (authResponse, error) {
+// // func exchangeCodeForToken(clientId, secret, code, grantType string) (authResponse, error) {
 
-	form := url.Values{}
-	form.Set("client_id", clientId)
-	form.Set("client_secret", secret)
-	form.Set("code", code)
-	form.Set("grant_type", grantType)
+// // 	form := url.Values{}
+// // 	form.Set("client_id", clientId)
+// // 	form.Set("client_secret", secret)
+// // 	form.Set("code", code)
+// // 	form.Set("grant_type", grantType)
 
-	resp, err := http.PostForm(stravaTokenURL, form)
-	if err != nil {
-		return authResponse{}, err
-	}
-	defer resp.Body.Close()
+// // 	resp, err := http.PostForm(stravaTokenURL, form)
+// // 	if err != nil {
+// // 		return authResponse{}, err
+// // 	}
+// // 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return authResponse{}, errors.New("token exchange failed")
-	}
+// // 	if resp.StatusCode != http.StatusOK {
+// // 		return authResponse{}, errors.New("token exchange failed")
+// // 	}
 
-	var t authResponse
-	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
-		return authResponse{}, err
-	}
+// // 	var t authResponse
+// // 	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
+// // 		return authResponse{}, err
+// // 	}
 
-	token := authResponse{
-		AccessToken: t.AccessToken,
-	}
+// // 	token := authResponse{
+// // 		AccessToken: t.AccessToken,
+// // 	}
 
-	return token, nil
-}
+// // 	return token, nil
+// // }
 
-type authResponse struct {
-	AccessToken string `json:"access_token"`
-}
+// // type authResponse struct {
+// // 	AccessToken string `json:"access_token"`
+// // }

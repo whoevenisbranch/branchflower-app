@@ -1,9 +1,9 @@
-package scoring
+package tree
 
 import (
 	"math"
 
-	"github.com/whoevenisbranch/branchflower/internal/repo"
+	"github.com/whoevenisbranch/branchflower/internal/storage"
 )
 
 const (
@@ -14,7 +14,7 @@ const (
 const oneHourInSeconds float64 = 3600.0
 const canopyActiveDaysCap float64 = 28.0
 
-func DeriveBaseScores(totalRunDays int, bucket []repo.DailyAggregate) BaseScores {
+func deriveBaseScores(totalRunDays int, bucket []storage.DailyAggregate) BaseScores {
 
 	derived := calculateDerivedAggregates(bucket)
 	derived.display()
@@ -59,7 +59,7 @@ func calculateCanopyScores(derived *derivedAggregates) BaseScores {
 	return score
 }
 
-func calculateDerivedAggregates(bucket []repo.DailyAggregate) derivedAggregates {
+func calculateDerivedAggregates(bucket []storage.DailyAggregate) derivedAggregates {
 
 	var derived derivedAggregates
 
@@ -159,7 +159,7 @@ func classifyTreeState(Fullness, Vitality, trendSignal float64) string {
 	return state
 }
 
-func DeriveUIScores(baseScores BaseScores) UIScores {
+func deriveUIScores(baseScores BaseScores) UIScores {
 
 	var uiScores UIScores
 

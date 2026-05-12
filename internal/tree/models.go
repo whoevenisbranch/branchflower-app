@@ -1,6 +1,15 @@
-package scoring
+package tree
 
-import "log"
+import (
+	"log"
+	"time"
+)
+
+type TreeData struct {
+	BaseScores  BaseScores
+	UIScores    UIScores
+	GeneratedAt time.Time
+}
 
 type BaseScores struct {
 	History   float64 `json:"history"`
