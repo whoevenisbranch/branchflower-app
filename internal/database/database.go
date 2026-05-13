@@ -1,6 +1,37 @@
-package storage
+package database
 
-func MigrateTables(db *DB) error {
+import (
+	"database/sql"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+type DB struct {
+	Conn *sql.DB
+}
+
+func New() (*DB, error) {
+
+	db, err := sql.Open("sqlite3", "app.db")
+	if err != nil {
+		return nil, err
+	}
+
+	pingErr := db.Ping()
+	if pingErr != nil {
+		return nil, err
+	}
+
+	return &DB{
+		Conn: db,
+	}, nil
+}
+
+func (db *DB) Disconnect() error {
+	return db.Conn.Close()
+}
+
+func (db *DB) Migrate() error {
 	userTable := `
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11,7 +42,7 @@ func MigrateTables(db *DB) error {
     );`
 
 	dailyActivityTable := `
-    CREATE TABLE IF NOT EXISTS daily_activities_runs (
+    CREATE TABLE IF NOT EXISTS daily_activities (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         date DATETIME NOT NULL,
@@ -24,11 +55,11 @@ func MigrateTables(db *DB) error {
         UNIQUE(user_id, date) ON CONFLICT REPLACE
     );`
 
-	if _, err := db.conn.Exec(userTable); err != nil {
+	if _, err := db.Conn.Exec(userTable); err != nil {
 		return err
 	}
 
-	if _, err := db.conn.Exec(dailyActivityTable); err != nil {
+	if _, err := db.Conn.Exec(dailyActivityTable); err != nil {
 		return err
 	}
 

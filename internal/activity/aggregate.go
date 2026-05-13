@@ -1,10 +1,6 @@
-package tree
+package activity
 
-import (
-	"math"
-
-	"github.com/whoevenisbranch/branchflower/internal/storage"
-)
+import "math"
 
 const (
 	CanopyWindowDays   int = 42
@@ -14,7 +10,7 @@ const (
 const oneHourInSeconds float64 = 3600.0
 const canopyActiveDaysCap float64 = 28.0
 
-func deriveBaseScores(totalRunDays int, bucket []storage.DailyAggregate) BaseScores {
+func deriveBaseScores(totalRunDays int, bucket []DailyAggregate) BaseScores {
 
 	derived := calculateDerivedAggregates(bucket)
 	derived.display()
@@ -59,7 +55,7 @@ func calculateCanopyScores(derived *derivedAggregates) BaseScores {
 	return score
 }
 
-func calculateDerivedAggregates(bucket []storage.DailyAggregate) derivedAggregates {
+func calculateDerivedAggregates(bucket []DailyAggregate) derivedAggregates {
 
 	var derived derivedAggregates
 

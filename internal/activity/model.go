@@ -1,9 +1,23 @@
-package tree
+package activity
 
 import (
 	"log"
 	"time"
 )
+
+type DailyActivity struct {
+	ID                int
+	UserID            int
+	Date              time.Time
+	ActivityCount     int
+	MovingTimeSeconds int
+	LastUpdatedAt     time.Time
+}
+
+type DailyAggregate struct {
+	ActivityCount     int
+	MovingTimeSeconds int
+}
 
 type TreeData struct {
 	BaseScores  BaseScores

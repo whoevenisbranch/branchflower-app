@@ -18,7 +18,7 @@ const baseURL string = "https://www.strava.com/api/v3"
 const numActivitiesPerPage = 200
 
 var sharedHTTPClient *http.Client = &http.Client{
-	Timeout: 20 * time.Second,
+	Timeout: 10 * time.Second,
 }
 
 type StravaClient struct {
@@ -51,6 +51,7 @@ func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 	if err != nil {
 		return Athlete{}, err
 	}
+
 	return dto.ToAthlete(), nil
 }
 
@@ -100,10 +101,17 @@ func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, erro
 
 	log.Printf("Requesting: %s", endpoint)
 
-	request, err := sc.buildHTTPRequest(endpoint, ctx)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+
 	if err != nil {
 		return zero, err
 	}
+
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "Branchflower-App")
+
+	authorizationHeader := fmt.Sprintf("Bearer %s", sc.accessToken)
+	request.Header.Set("Authorization", authorizationHeader)
 
 	response, err := sc.httpClient.Do(request)
 	if err != nil {
@@ -117,23 +125,6 @@ func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, erro
 	}
 
 	return dto, nil
-}
-
-func (sc *StravaClient) buildHTTPRequest(endpoint string, ctx context.Context) (*http.Request, error) {
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "Branchflower-App")
-
-	authorizationHeader := fmt.Sprintf("Bearer %s", sc.accessToken)
-	request.Header.Set("Authorization", authorizationHeader)
-
-	return request, nil
 }
 
 func handleResponse[T any](response *http.Response) (T, error) {

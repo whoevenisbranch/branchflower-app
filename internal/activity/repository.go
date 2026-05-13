@@ -1,4 +1,4 @@
-package storage
+package activity
 
 import (
 	"context"
@@ -6,27 +6,28 @@ import (
 	"log"
 	"time"
 
+	"github.com/whoevenisbranch/branchflower/internal/database"
 	timeutils "github.com/whoevenisbranch/branchflower/internal/utility/time_utils"
 )
 
 type ActivityRepository struct {
-	db *DB
+	dbConn database.DB
 }
 
-func NewActivityRepository(db *DB) *ActivityRepository {
-	return &ActivityRepository{
-		db: db,
+func NewRepository(db *database.DB) ActivityRepository {
+	return ActivityRepository{
+		dbConn: *db,
 	}
 }
 
-func (r *ActivityRepository) AddDailyActivities(ctx context.Context, activites map[time.Time]DailyActivity) error {
+func (repo *ActivityRepository) AddDailyActivities(ctx context.Context, activites map[time.Time]DailyActivity) error {
 	defer timeutils.TimeCheck("ActivityRepository.AddDailyActivities", time.Now())
 
 	expected := len(activites)
 	var actual = 0
 
-	stmt, err := r.db.conn.PrepareContext(ctx,
-		`INSERT INTO daily_activities_runs 
+	stmt, err := repo.dbConn.Conn.PrepareContext(ctx,
+		`INSERT INTO daily_activities 
 		(user_id, date, activity_count, moving_time_seconds, last_updated) 
 		VALUES (?, ?, ?, ?, ?)
 		`)
@@ -59,14 +60,14 @@ func (r *ActivityRepository) AddDailyActivities(ctx context.Context, activites m
 	return nil
 }
 
-func (r *ActivityRepository) CountTotalActiveDaysById(ctx context.Context, userId int) (int, error) {
+func (repo *ActivityRepository) CountTotalActiveDaysById(ctx context.Context, userId int) (int, error) {
 	defer timeutils.TimeCheck("ActivityRepository.CountTotalActiveDaysById", time.Now())
 
 	var count int
 	var err error
 
-	err = r.db.conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM daily_activities_runs WHERE user_id = ?`, userId,
+	err = repo.dbConn.Conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM daily_activities WHERE user_id = ?`, userId,
 	).Scan(&count)
 
 	if err != nil {
@@ -75,17 +76,18 @@ func (r *ActivityRepository) CountTotalActiveDaysById(ctx context.Context, userI
 
 	return count, nil
 
+
 }
 
-func (r *ActivityRepository) FilterActiveDaysByUserID(ctx context.Context, userID int, from, to time.Time) (map[time.Time]DailyAggregate, error) {
+func (repo *ActivityRepository) FilterActiveDaysByUserID(ctx context.Context, userID int, from, to time.Time) (map[time.Time]DailyAggregate, error) {
 	defer timeutils.TimeCheck("ActivityRepository.FilterUserActiveDays", time.Now())
 
 	var records = make(map[time.Time]DailyAggregate)
 	var err error
 
-	rows, err := r.db.conn.QueryContext(ctx, `
+	rows, err := repo.dbConn.Conn.QueryContext(ctx, `
 		SELECT date, activity_count, moving_time_seconds
-		FROM daily_activities_runs
+		FROM daily_activities
 		WHERE user_id = ? AND date >= ? AND date <= ?
 		ORDER BY date ASC`, userID, from, to)
 
