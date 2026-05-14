@@ -1,6 +1,30 @@
-package scoring
+package activity
 
-import "log"
+import (
+	"log"
+	"time"
+)
+
+type DailyActivity struct {
+	ID                int
+	UserID            int
+	Date              time.Time
+	ActivityCount     int
+	MovingTimeSeconds int
+	LastUpdatedAt     time.Time
+}
+
+type DailyAggregate struct {
+	ActivityCount     int
+	MovingTimeSeconds int
+}
+
+type TreeData struct {
+	OwnerID     int
+	BaseScores  BaseScores
+	UIScores    UIScores
+	GeneratedAt time.Time
+}
 
 type BaseScores struct {
 	History   float64 `json:"history"`

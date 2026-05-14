@@ -21,15 +21,15 @@ type Athlete struct {
 	Username  string
 }
 
-func (sa stravaAthleteDTO) ToAthlete() Athlete {
-	return Athlete{
-		StravaId:  sa.ID,
-		FirstName: sa.FirstName,
-		Username:  sa.Username,
-	}
-}
-
 // Activities
+
+type Activity struct {
+	Id                int64
+	Name              string
+	Type              string
+	StartTimestamp    time.Time
+	MovingTimeSeconds int
+}
 
 type stravaSummaryActivityDTO struct {
 	ID                 int64     `json:"id"`

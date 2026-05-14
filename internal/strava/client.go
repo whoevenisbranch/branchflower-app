@@ -10,46 +10,35 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	"github.com/whoevenisbranch/branchflower/internal/oauth"
-	"github.com/whoevenisbranch/branchflower/internal/utility"
 )
 
+const baseURL string = "https://www.strava.com/api/v3"
 const numActivitiesPerPage = 200
+
+var sharedHTTPClient *http.Client = &http.Client{
+	Timeout: 10 * time.Second,
+}
 
 type StravaClient struct {
 	httpClient  *http.Client
-	baseURL     string
 	accessToken string
 }
 
-func NewStravaClient(baseURL string) (*StravaClient, error) {
+func NewStravaClient(token string) (StravaClient, error) {
 
-	if baseURL == "" {
-		return nil, ErrStravaClientMissingBaseURL
+	if token == "" {
+		return StravaClient{}, ErrStravaClientMissingAccessToken
 	}
 
-	accessToken, err := oauth.FetchAccessToken()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if accessToken == "" {
-		return nil, ErrStravaClientMissingAccessToken
-	}
-
-	return &StravaClient{
-		httpClient: &http.Client{
-			Timeout: 20 * time.Second,
-		},
-		baseURL:     baseURL,
-		accessToken: accessToken,
+	return StravaClient{
+		httpClient:  sharedHTTPClient,
+		accessToken: token,
 	}, nil
 }
 
 func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 
-	baseUrl := sc.baseURL + "/athlete"
+	baseUrl := baseURL + "/athlete"
 
 	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
@@ -60,12 +49,13 @@ func (sc *StravaClient) GetAthlete(ctx context.Context) (Athlete, error) {
 	if err != nil {
 		return Athlete{}, err
 	}
+
 	return dto.ToAthlete(), nil
 }
 
 func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) (StravaActivitiesDTO, error) {
 
-	baseUrl := sc.baseURL + "/athlete/activities"
+	baseUrl := baseURL + "/athlete/activities"
 	endpoint, err := url.Parse(baseUrl)
 	if err != nil {
 		return StravaActivitiesDTO{}, err
@@ -103,16 +93,22 @@ func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) (StravaActi
 }
 
 func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, error) {
-	defer utility.TimeCheck("GET", time.Now())
 
 	var zero T
 
 	log.Printf("Requesting: %s", endpoint)
 
-	request, err := sc.buildHTTPRequest(endpoint, ctx)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+
 	if err != nil {
 		return zero, err
 	}
+
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "Branchflower-App")
+
+	authorizationHeader := fmt.Sprintf("Bearer %s", sc.accessToken)
+	request.Header.Set("Authorization", authorizationHeader)
 
 	response, err := sc.httpClient.Do(request)
 	if err != nil {
@@ -126,23 +122,6 @@ func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, erro
 	}
 
 	return dto, nil
-}
-
-func (sc *StravaClient) buildHTTPRequest(endpoint string, ctx context.Context) (*http.Request, error) {
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "Branchflower-App")
-
-	authorizationHeader := fmt.Sprintf("Bearer %s", sc.accessToken)
-	request.Header.Set("Authorization", authorizationHeader)
-
-	return request, nil
 }
 
 func handleResponse[T any](response *http.Response) (T, error) {
