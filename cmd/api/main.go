@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/whoevenisbranch/branchflower/internal/activity"
@@ -32,15 +33,25 @@ func main() {
 	activityRepository := activity.NewRepository(db)
 
 	//Configure services
-	userService := user.NewService(&userRepository)
-	activityService := activity.NewService(&activityRepository)
+	cfg := auth.StravaOAuthConfig{
+		ClientId:     os.Getenv("STRAVA_OAUTH_CLIENT_ID"),
+		ClientSecret: os.Getenv("STRAVA_OAUTH_CLIENT_SECRET"),
+		CallbackURL:  os.Getenv("CALLBACK_URL"),
+	}
+	authService := auth.NewOAuthService(cfg)
+
+	userService := user.NewService(userRepository)
+	activityService := activity.NewService(activityRepository)
 
 	//Handlers
-	treeHandler := activity.NewHandler(&userService, &activityService)
+
+	authHandler := auth.NewAuthRedirectHandler(authService)
+
+	treeHandler := activity.NewHandler(userService, activityService, authService)
 
 	//Start HTTP server
 	http.HandleFunc("/protected", treeHandler.Handle)
-	http.HandleFunc("/oauth/callback", auth.HandleOAuthRedirect)
+	http.HandleFunc("/oauth/callback", authHandler.HandleOAuthRedirect)
 
 	log.Println("Staring server on port :8085")
 	log.Fatal(http.ListenAndServe(":8085", nil))

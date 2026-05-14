@@ -9,10 +9,10 @@ import (
 )
 
 type ActivityService struct {
-	store *ActivityRepository
+	store ActivityRepository
 }
 
-func NewService(repo *ActivityRepository) ActivityService {
+func NewService(repo ActivityRepository) ActivityService {
 	return ActivityService{
 		store: repo,
 	}
@@ -37,6 +37,7 @@ func (svc *ActivityService) GetUserTreeData(ctx context.Context, userID int) (Tr
 	uiScores := deriveUIScores(baseScores)
 
 	return TreeData{
+		OwnerID:     userID,
 		BaseScores:  baseScores,
 		UIScores:    uiScores,
 		GeneratedAt: time.Now(),

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Branchflower App</title>
+</head>
+
+<body>
+    <h1>{{.UserInfo.FirstName}}'s Tree</h1>
+    <p>Last Activity Sync: {{.UserInfo.LastSyncAt}}</p>
+
+    <h2>Base Scores</h2>
+    <p>Overall State: {{.Tree.BaseScores.State}}</p>
+    <p>History Score: {{printf "%.2f" .Tree.BaseScores.History}}</p>
+    <p>Fullness Score: {{printf "%.2f" .Tree.BaseScores.Fullness}}</p>
+    <p>Stability Score: {{printf "%.2f" .Tree.BaseScores.Stability}}</p>
+    <p>Vitality Score: {{printf "%.2f" .Tree.BaseScores.Vitality}}</p>
+
+    <h2>UI Scores</h2>
+    <h3>Trunk</h3>
+    <p>Height: {{printf "%.2f" .Tree.UIScores.Trunk.Height}}</p>
+    <p>Width: {{printf "%.2f" .Tree.UIScores.Trunk.Width}}</p>
+    <h3>Canopy</h3>
+    <p>RadiusX: {{printf "%.2f" .Tree.UIScores.Canopy.RadiusX}}</p>
+    <p>RadiusY: {{printf "%.2f" .Tree.UIScores.Canopy.RadiusY}}</p>
+    <p>Density: {{printf "%.2f" .Tree.UIScores.Canopy.Density}}</p>
+    <p>Smoothness: {{printf "%.2f" .Tree.UIScores.Canopy.Smoothness}}</p>
+    <p>Saturation: {{printf "%.2f" .Tree.UIScores.Canopy.Saturation}}</p>
+    <p>Lightness: {{printf "%.2f" .Tree.UIScores.Canopy.Lightness}}</p>
+</body>
+
+</html>

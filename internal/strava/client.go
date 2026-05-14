@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	timeutils "github.com/whoevenisbranch/branchflower/internal/utility/time_utils"
 )
 
 const baseURL string = "https://www.strava.com/api/v3"
@@ -95,7 +93,6 @@ func (sc *StravaClient) GetAllAthleteActivities(ctx context.Context) (StravaActi
 }
 
 func get[T any](sc *StravaClient, ctx context.Context, endpoint string) (T, error) {
-	defer timeutils.TimeCheck("GET", time.Now())
 
 	var zero T
 

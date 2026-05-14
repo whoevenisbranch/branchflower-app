@@ -1,6 +1,8 @@
 package activity
 
-import "math"
+import (
+	"math"
+)
 
 const (
 	CanopyWindowDays   int = 42
@@ -15,14 +17,15 @@ func deriveBaseScores(totalRunDays int, bucket []DailyAggregate) BaseScores {
 	derived := calculateDerivedAggregates(bucket)
 	derived.display()
 
-	var base BaseScores
-	base.History = clamp(float64(totalRunDays), 0, 1)
-	base = calculateCanopyScores(&derived)
+	base := calculateCanopyScores(&derived)
 
 	trendSignal := calculateTrend(&derived)
 	treeState := classifyTreeState(base.Fullness, base.Vitality, trendSignal)
 
 	base.State = treeState
+	base.History = historyScore(float64(totalRunDays), 300.0)
+
+	base.Display()
 
 	return base
 
@@ -195,6 +198,13 @@ func getUICanopyValues(scores BaseScores) canopy {
 
 	return c
 
+}
+
+func historyScore(count float64, scale float64) float64 {
+	if count <= 0 {
+		return 0
+	}
+	return math.Log1p(count) / math.Log1p(count+scale)
 }
 
 func clamp(val, lo, hi float64) float64 {

@@ -20,6 +20,7 @@ type DailyAggregate struct {
 }
 
 type TreeData struct {
+	OwnerID     int
 	BaseScores  BaseScores
 	UIScores    UIScores
 	GeneratedAt time.Time

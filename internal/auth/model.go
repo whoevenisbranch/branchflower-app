@@ -3,7 +3,7 @@ package auth
 import "time"
 
 type OAuth struct {
-	AthleteId int
+	AthleteId   int
 	AccessToken string
 	Expiration  time.Time
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/whoevenisbranch/branchflower/internal/database"
-	timeutils "github.com/whoevenisbranch/branchflower/internal/utility/time_utils"
 )
 
 type UserRepository struct {
@@ -21,8 +20,6 @@ func NewRepository(db *database.DB) UserRepository {
 }
 
 func (repo *UserRepository) CreateUser(ctx context.Context, stravaID int, name string) (User, error) {
-	defer timeutils.TimeCheck("UserRepository.CreateUser", time.Now())
-
 	var err error
 
 	now := time.Now().UTC()
@@ -67,7 +64,6 @@ func (repo *UserRepository) GetUserByStravaID(ctx context.Context, id int) (User
 }
 
 func (repo *UserRepository) SetUserLastSync(ctx context.Context, userID int) error {
-	defer timeutils.TimeCheck("UserRepository.SetUserLastSync", time.Now())
 
 	var err error
 

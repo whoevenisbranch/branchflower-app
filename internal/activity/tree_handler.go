@@ -2,7 +2,7 @@ package activity
 
 import (
 	"context"
-	"encoding/json"
+	"html/template"
 	"log"
 	"net/http"
 	"time"
@@ -11,33 +11,36 @@ import (
 	"github.com/whoevenisbranch/branchflower/internal/user"
 )
 
+var tmpl = template.Must(template.ParseFiles("templates/tree.html"))
+
 type Handler struct {
-	userService     *user.UserService
-	activityService *ActivityService
+	authService     auth.OAuthService
+	userService     user.UserService
+	activityService ActivityService
 }
 
-func NewHandler(userSvc *user.UserService, activitySvc *ActivityService) Handler {
+func NewHandler(userSvc user.UserService, activitySvc ActivityService, authSvc auth.OAuthService) Handler {
 	return Handler{
+		authService:     authSvc,
 		userService:     userSvc,
 		activityService: activitySvc,
 	}
 }
 
-func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
+func (handler *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 
-	handled, err := auth.AuthenticateWithStrava(w, r)
+	handled, err := handler.authService.AuthenticateWithStrava(w, r)
 	if handled {
 		return
 	}
 	if err != nil {
-		log.Println(err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	session := getSessionFromCookie(r)
+	session := handler.authService.GetSessionFromCookie(r)
 
-	u, err := h.userService.GetOrCreateUser(session.OAuth.AthleteId, session.OAuth.AccessToken)
+	u, err := handler.userService.GetOrCreateUser(session.OAuth.AthleteId, session.OAuth.AccessToken)
 	if err != nil {
 		http.Error(w, "error", 500)
 		return
@@ -45,30 +48,35 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	log.Println("user:", u.FirstName)
 
 	if u.LastSyncAt == nil || time.Since(*u.LastSyncAt) > 6*time.Hour {
-		if err = h.activityService.SyncActivities(context.Background(), u.ID, session.OAuth.AccessToken); err != nil {
+		if err = handler.activityService.SyncActivities(context.Background(), u.ID, session.OAuth.AccessToken); err != nil {
 			http.Error(w, "sync error", 500)
+			return
+		}
+		if err = handler.userService.SetUserLastSync(context.Background(), u.ID); err != nil {
+			http.Error(w, "set sync error", 500)
 			return
 		}
 	}
 
-	err = h.userService.SetUserLastSync(context.Background(), u.ID)
-	if err != nil {
-		http.Error(w, "set sync error", 500)
-		return
-	}
-
-	tree, err := h.activityService.GetUserTreeData(context.Background(), u.ID)
+	tree, err := handler.activityService.GetUserTreeData(context.Background(), u.ID)
 	if err != nil {
 		http.Error(w, "tree error", 500)
 		return
 	}
 
-	json.NewEncoder(w).Encode(tree)
+	tData := templateData{
+		UserInfo: u,
+		Tree:     tree,
+	}
+
+	err = tmpl.Execute(w, tData)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+	}
 
 }
 
-func getSessionFromCookie(r *http.Request) auth.Session {
-	cookie, _ := r.Cookie("session")
-
-	return auth.Sessions[cookie.Value]
+type templateData struct {
+	UserInfo user.User
+	Tree     TreeData
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/whoevenisbranch/branchflower/internal/database"
-	timeutils "github.com/whoevenisbranch/branchflower/internal/utility/time_utils"
 )
 
 type ActivityRepository struct {
@@ -21,7 +20,6 @@ func NewRepository(db *database.DB) ActivityRepository {
 }
 
 func (repo *ActivityRepository) AddDailyActivities(ctx context.Context, activites map[time.Time]DailyActivity) error {
-	defer timeutils.TimeCheck("ActivityRepository.AddDailyActivities", time.Now())
 
 	expected := len(activites)
 	var actual = 0
@@ -61,7 +59,6 @@ func (repo *ActivityRepository) AddDailyActivities(ctx context.Context, activite
 }
 
 func (repo *ActivityRepository) CountTotalActiveDaysById(ctx context.Context, userId int) (int, error) {
-	defer timeutils.TimeCheck("ActivityRepository.CountTotalActiveDaysById", time.Now())
 
 	var count int
 	var err error
@@ -80,7 +77,6 @@ func (repo *ActivityRepository) CountTotalActiveDaysById(ctx context.Context, us
 }
 
 func (repo *ActivityRepository) FilterActiveDaysByUserID(ctx context.Context, userID int, from, to time.Time) (map[time.Time]DailyAggregate, error) {
-	defer timeutils.TimeCheck("ActivityRepository.FilterUserActiveDays", time.Now())
 
 	var records = make(map[time.Time]DailyAggregate)
 	var err error

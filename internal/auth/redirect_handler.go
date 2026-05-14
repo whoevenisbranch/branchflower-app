@@ -6,13 +6,22 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 )
 
 const stravaTokenURL = "https://www.strava.com/oauth/token"
 
-func HandleOAuthRedirect(w http.ResponseWriter, r *http.Request) {
+type RedirectHandler struct {
+	service OAuthService
+}
+
+func NewAuthRedirectHandler(svc OAuthService) RedirectHandler {
+	return RedirectHandler{
+		service: svc,
+	}
+}
+
+func (handler *RedirectHandler) HandleOAuthRedirect(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
 		log.Print("could not parse form ", err)
@@ -21,10 +30,11 @@ func HandleOAuthRedirect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	code := r.FormValue("code")
+	log.Print(code)
 
 	form := url.Values{}
-	form.Set("client_id", os.Getenv("STRAVA_OAUTH_CLIENT_ID"))
-	form.Set("client_secret", os.Getenv("STRAVA_OAUTH_CLIENT_SECRET"))
+	form.Set("client_id", handler.service.OAuthConfig.ClientId)
+	form.Set("client_secret", handler.service.OAuthConfig.ClientSecret)
 	form.Set("code", code)
 	form.Set("grant_type", "authorization_code")
 
@@ -36,6 +46,12 @@ func HandleOAuthRedirect(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode >= 400 {
+		log.Print("error response from strava ", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	var t OAuthAccessResponse
 	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
 		log.Print("could not parse json response", err)
@@ -44,10 +60,10 @@ func HandleOAuthRedirect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := rand.Text()
-	Sessions[sessionID] = Session{
+	handler.service.Sessions[sessionID] = Session{
 		OAuth: OAuth{
 			AccessToken: t.AccessToken,
-			Expiration:  time.Now().Add(time.Duration(t.Expiration) * time.Second),
+			Expiration:  time.Now().UTC().Add(time.Duration(t.Expiration) * time.Second),
 			AthleteId:   t.Athlete.ID,
 		},
 	}
